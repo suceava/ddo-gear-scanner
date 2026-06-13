@@ -22,6 +22,10 @@
     <Content Include="..\..\assets\templates\*.png" Link="Templates\%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- Inventory rag-doll anchor template for slot detection. -->
+    <Content Include="..\..\assets\inventory\*.png" Link="Inventory\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

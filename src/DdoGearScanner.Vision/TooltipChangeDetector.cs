@@ -37,8 +37,13 @@ public sealed class TooltipChangeDetector
     private Point _capturedCursor;
     private Point _prevCursor;
     private bool _havePrevCursor;
+    private int _prevTotalChanged;   // last frame's change count, to tell when a tooltip stops drawing
 
     public string LastChangeInfo { get; private set; } = "";
+
+    /// <summary>True when the last frame had no tooltip up (≈ the baseline) — a good moment to
+    /// locate the rag-doll, which a tooltip would otherwise cover.</summary>
+    public bool LastFrameClean { get; private set; }
 
     public TooltipChangeDetector(int maxCursorDist = 380, int minW = 180, int minH = 100, int maxW = 1100, int maxH = 1450)
     {
@@ -52,6 +57,7 @@ public sealed class TooltipChangeDetector
         _stable = 0; _candidate = default;
         _hasCaptured = false; _capturedCursor = default;
         _havePrevCursor = false; _prevCursor = default;
+        _prevTotalChanged = 0;
     }
 
     public Rect? OnFrame(OpenCvMat frameBgrOrBgra, Point cursorInFrame)
@@ -80,6 +86,11 @@ public sealed class TooltipChangeDetector
 
         double frameArea = small.Width * (double)small.Height;
         int totalChanged = Cv2.CountNonZero(changed);
+        LastFrameClean = totalChanged < frameArea * QuietFraction;
+        // How much the change grew/shrank since last frame — large = the tooltip is still drawing
+        // in (fade/render), ~0 = fully drawn and steady.
+        int changeDelta = Math.Abs(totalChanged - _prevTotalChanged);
+        _prevTotalChanged = totalChanged;
 
         // Camera moved / scene jumped → baseline is stale, re-base and bail.
         if (totalChanged > frameArea * BigChangeFraction)
@@ -114,8 +125,10 @@ public sealed class TooltipChangeDetector
         }
 
         _candidate = r;
-        _stable++;
-        LastChangeInfo = $"blob {r.Width}x{r.Height} stable={_stable} cap={_hasCaptured}";
+        // Only count it as "settled" once the tooltip has stopped changing (finished drawing in).
+        // While it's still rendering, changeDelta is large → reset the counter.
+        if (changeDelta > frameArea * 0.004) _stable = 0; else _stable++;
+        LastChangeInfo = $"blob {r.Width}x{r.Height} stable={_stable} d={changeDelta} cap={_hasCaptured}";
 
         if (_stable >= SettleFrames)
         {

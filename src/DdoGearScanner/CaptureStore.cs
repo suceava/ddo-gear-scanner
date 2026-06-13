@@ -6,14 +6,13 @@ using DdoGearScanner.Model;
 namespace DdoGearScanner;
 
 /// <summary>
-/// Persists the running list of scanned gear items as JSON in %APPDATA%\DdoGearScanner.
-/// Adapted from pg-loot-master's GameHistoryStore (same Load/Append/Save + swallow-on-error
-/// pattern). This is the "local list of items + mods" the desktop tool produces in v1.
+/// The character's equipped loadout: one item per equipment slot. Re-capturing a slot overwrites
+/// it (it's not a new entry). Persists to %APPDATA%\DdoGearScanner\loadout.json.
 /// </summary>
 public sealed class CaptureStore
 {
     private static readonly string Dir = AppSettings.AppDataDir;
-    private static readonly string StorePath = Path.Combine(Dir, "captures.json");
+    private static readonly string StorePath = Path.Combine(Dir, "loadout.json");
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -21,7 +20,7 @@ public sealed class CaptureStore
         Converters = { new JsonStringEnumConverter() },
     };
 
-    public List<GearItem> Items { get; private set; } = new();
+    public Dictionary<EquipSlot, GearItem> Loadout { get; private set; } = new();
 
     public static CaptureStore Load()
     {
@@ -30,28 +29,26 @@ public sealed class CaptureStore
         {
             if (File.Exists(StorePath))
             {
-                List<GearItem>? loaded = JsonSerializer.Deserialize<List<GearItem>>(File.ReadAllText(StorePath), JsonOpts);
-                if (loaded is not null) store.Items = loaded;
+                var loaded = JsonSerializer.Deserialize<Dictionary<EquipSlot, GearItem>>(File.ReadAllText(StorePath), JsonOpts);
+                if (loaded is not null) store.Loadout = loaded;
             }
         }
         catch { /* start empty rather than crash on a corrupt file */ }
         return store;
     }
 
-    public void Append(GearItem item)
+    /// <summary>Set (overwrite) the item in a slot.</summary>
+    public void SetSlot(EquipSlot slot, GearItem item)
     {
-        Items.Add(item);
+        Loadout[slot] = item;
         Save();
     }
 
-    public void Remove(GearItem item)
-    {
-        if (Items.Remove(item)) Save();
-    }
+    public GearItem? Get(EquipSlot slot) => Loadout.TryGetValue(slot, out GearItem? i) ? i : null;
 
     public void Clear()
     {
-        Items.Clear();
+        Loadout.Clear();
         Save();
     }
 
@@ -60,7 +57,7 @@ public sealed class CaptureStore
         try
         {
             Directory.CreateDirectory(Dir);
-            File.WriteAllText(StorePath, JsonSerializer.Serialize(Items, JsonOpts));
+            File.WriteAllText(StorePath, JsonSerializer.Serialize(Loadout, JsonOpts));
         }
         catch { /* losing one save beats crashing */ }
     }

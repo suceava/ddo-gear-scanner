@@ -34,6 +34,21 @@ Phase-2 Claude vision reader is meant to replace.
    usually not readable from a single item, so they're left unset.
 7. **Binding** — `Bound to Character/Account ...` or `Unbound`.
 
+## Top block: header / name / type / quality (parsed in `TooltipTextParser`)
+
+The lines above the stats are, in order: an optional **"CURRENTLY EQUIPPED"** header (the equipped-
+comparison tooltip — skip it), the **item name** (which can WRAP across 2–3 lines), an optional
+**item-type** line, an optional **quality** line, then **"Equips to: …"**. The catch: the type line
+(`Heavy Armor`, `Tower Shield`, `Bastard Sword (one-handed)`) sits right under the name and looks
+like a name continuation. It's separated by being a **known DDO type** (whole-line match against
+`ItemTypes`, dropping a trailing `(one-handed)`), so it's captured as `ItemTypeText` instead of
+polluting the name. Name gathering stops at the first of: a type line, a quality word (`Normal`,
+`Rare`, …), or a content marker (`Equips to`, `Minimum Level`, `Bound`, …). `Equips to:` is the
+reliable end-of-top-block boundary (it's right-justified in-game but OCRs as its own line).
+
+NOTE: for equipped items the **calibrated inventory slot overrides** the parser's slot — slot
+detection comes from the paper-doll position, not this text.
+
 ## Bonus types (the stacking-critical field)
 
 Same-type bonuses to a stat **don't stack** (highest wins); different types stack. This is what the

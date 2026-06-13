@@ -11,17 +11,17 @@ using DdoGearScanner.Model;
 namespace DdoGearScanner;
 
 /// <summary>
-/// Main interactive window: shows the last captured item's parsed fields + crop + raw OCR text,
-/// and a running list of everything scanned this/previous sessions. Normal (not click-through)
-/// window — the click-through overlay is separate.
+/// Main window: the equipped LOADOUT sheet (one row per equipment slot, filled as you capture;
+/// re-capturing a slot overwrites it) on the left, and the selected item's detail + tooltip image
+/// on the right. Normal (not click-through) window — the click-through overlay is separate.
 /// </summary>
 public partial class CaptureListWindow : Window
 {
     private readonly CaptureStore _store;
     private readonly AppSettings _settings;
-    private readonly ObservableCollection<GearItem> _items;
-    // Captured tooltip images for THIS session, keyed by item (items loaded from disk have none).
-    private readonly Dictionary<GearItem, BitmapImage> _crops = new();
+    private readonly ObservableCollection<SlotRow> _rows;
+    // Captured tooltip images for THIS session, keyed by slot (slots loaded from disk have none).
+    private readonly Dictionary<EquipSlot, BitmapImage> _crops = new();
 
     /// <summary>Raised when the "Scan now" button is clicked (App wires this to the pipeline).</summary>
     public event Action? ScanRequested;
@@ -31,6 +31,9 @@ public partial class CaptureListWindow : Window
 
     /// <summary>Raised when the user clicks the Detection toggle button.</summary>
     public event Action? DetectionToggleRequested;
+
+    /// <summary>Raised when the user clicks the Calibrate slots button.</summary>
+    public event Action? CalibrateRequested;
 
     private bool _bindingHotkey;
 
@@ -43,8 +46,10 @@ public partial class CaptureListWindow : Window
         Left = settings.WindowLeft;
         Top = settings.WindowTop;
 
-        _items = new ObservableCollection<GearItem>(store.Items.AsEnumerable().Reverse());
-        ItemsList.ItemsSource = _items;
+        _rows = new ObservableCollection<SlotRow>(SlotInfo.DisplayOrder.Select(s => new SlotRow(s)));
+        foreach (SlotRow row in _rows)
+            if (store.Loadout.TryGetValue(row.Slot, out GearItem? it)) row.Item = it;
+        SlotSheet.ItemsSource = _rows;
 
         if (!ocrAvailable)
             StatusText.Text = "⚠ Windows OCR engine unavailable — install an OCR language pack (Settings → Language).";
@@ -74,6 +79,10 @@ public partial class CaptureListWindow : Window
 
     private void DetectionToggle_Click(object sender, RoutedEventArgs e) => DetectionToggleRequested?.Invoke();
 
+    private void Calibrate_Click(object sender, RoutedEventArgs e) => CalibrateRequested?.Invoke();
+
+    public void SetStatusText(string text) => Dispatcher.Invoke(() => StatusText.Text = text);
+
     public void OnCaptureCompleted(CaptureOutcome outcome)
     {
         Dispatcher.Invoke(() =>
@@ -83,29 +92,40 @@ public partial class CaptureListWindow : Window
 
             BitmapImage? crop = outcome.CropPng is { Length: > 0 } png ? BitmapFromBytes(png) : null;
 
-            if (outcome.Success)
+            // A successful capture with a known slot fills/overwrites that slot row and selects it.
+            if (outcome.Success && item.Slot != EquipSlot.Unknown
+                && _rows.FirstOrDefault(r => r.Slot == item.Slot) is SlotRow row)
             {
-                if (crop is not null) _crops[item] = crop;
-                _items.Insert(0, item);
-                ItemsList.SelectedItem = item;   // drives ShowItem via SelectionChanged
-                ItemsList.ScrollIntoView(item);
+                if (crop is not null) _crops[item.Slot] = crop;
+                row.Item = item;
+                SlotSheet.SelectedItem = row;   // drives ShowItem via SelectionChanged
+                SlotSheet.ScrollIntoView(row);
             }
             else
             {
-                // Not added to the list, but still show it so the user can see what was read.
+                // No calibrated slot (or failed read) — just show it in the detail panel.
                 ShowItem(item, crop);
             }
         });
     }
 
-    private void ItemsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void SlotSheet_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ItemsList.SelectedItem is GearItem item)
-            ShowItem(item, _crops.GetValueOrDefault(item));
+        if (SlotSheet.SelectedItem is SlotRow row)
+            ShowItem(row.Item, _crops.GetValueOrDefault(row.Slot));
     }
 
-    private void ShowItem(GearItem item, BitmapImage? crop)
+    private void ShowItem(GearItem? item, BitmapImage? crop)
     {
+        if (item is null)
+        {
+            LastName.Text = "— empty —";
+            LastMeta.Text = ""; LastReadInfo.Text = ""; LastBinding.Text = ""; RawText.Text = "";
+            ModsList.ItemsSource = null; AugList.ItemsSource = null; SetList.ItemsSource = null;
+            CropImage.Source = null;
+            return;
+        }
+
         LastName.Text = string.IsNullOrWhiteSpace(item.Name) ? "(no name read)" : item.Name;
         LastMeta.Text = $"ML {item.MinimumLevel?.ToString() ?? "?"}  ·  {item.Slot}  ·  {item.ItemTypeText ?? "type ?"}";
         LastReadInfo.Text = (item.IsLikelyNamed ? "likely NAMED" : "random/crafted")
@@ -166,12 +186,14 @@ public partial class CaptureListWindow : Window
 
     private void ClearList_Click(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show("Clear all captured items?", "DDO Gear Scanner",
+        if (MessageBox.Show("Clear the whole loadout?", "DDO Gear Scanner",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
         _store.Clear();
-        _items.Clear();
-        StatusText.Text = "Cleared.";
+        foreach (SlotRow row in _rows) row.Item = null;
+        _crops.Clear();
+        ShowItem(null, null);
+        StatusText.Text = "Loadout cleared.";
     }
 
     private void DetectGameWindow_Click(object sender, RoutedEventArgs e)

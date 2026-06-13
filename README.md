@@ -1,9 +1,10 @@
 # ddo-gear-scanner
 
 Windows desktop overlay that reads **Dungeons & Dragons Online (DDO)** gear tooltips off the
-screen. Hover a piece of gear in-game, press a hotkey, and the tool captures the tooltip, OCRs
-it, parses it into a structured item (name, minimum level, slot, **mods with bonus type**,
-augment slots, set bonus, binding), and saves it to a local list.
+screen and builds your **equipped loadout**. Start a detection session, hover each equipped slot on
+the inventory paper-doll, and the tool captures the tooltip, OCRs it, parses it into a structured
+item (name, type, minimum level, **mods with bonus type**, augment slots, set bonus, binding), tags
+it with its equipment slot, and fills it into the loadout sheet (re-capturing a slot overwrites it).
 
 DDO has no API and no gear export — this is the missing "read my equipped gear" piece. It
 handles both **named items** (the recognizable chase items) and **random / Cannith-crafted
@@ -29,21 +30,21 @@ and OCR infrastructure are reused from it.
 - **DDO in windowed or borderless windowed mode.** Exclusive fullscreen bypasses the Windows
   Graphics Capture API and nothing will be captured.
 - A **Windows OCR language pack** (English is present by default on most installs).
-- **Run the app as administrator.** DDO runs elevated, and Windows suppresses a non-elevated app's
-  global hotkey while an elevated window has focus — so the capture hotkey wouldn't fire over the
-  game. The app's manifest requests administrator, so you'll get one UAC prompt at launch.
+- No admin / UAC needed (DDO isn't elevated; the hotkey uses a low-level keyboard hook that fires
+  over the game regardless).
 
 ## Steps
 
-1. Launch DDO in windowed / borderless windowed mode.
-2. Run `DdoGearScanner.exe`. The main window opens.
-3. Click **Detect game window** to confirm the tool sees DDO (the DDO row is marked ➤). This also
-   reveals the real process name / window class if the defaults need updating.
-4. Hover a gear tooltip in DDO and press **ScrollLock** (the default hotkey; rebind via **Set hotkey**, or click **Scan now**). The parsed item
-   appears in the left panel and is added to the list; a toast confirms over the game.
+1. Launch DDO in windowed / borderless windowed mode and **open your inventory** (paper-doll visible).
+2. Run `DdoGearScanner.exe`.
+3. **Calibrate once:** with the inventory open and no tooltip showing, click **Calibrate slots** and
+   follow the on-screen prompts — hover the center of each slot it names and press the hotkey. (Saved;
+   only redo if you change resolution / UI scale.)
+4. Press the hotkey (default **Insert**, rebind via **Set hotkey**) to start **Detection**, then hover
+   each equipped piece. Each tooltip fills its slot in the loadout sheet; click a slot to see details.
 
-Captures persist to `%APPDATA%\DdoGearScanner\captures.json`. Debug crops (for tuning tooltip
-detection) go to `%APPDATA%\DdoGearScanner\debug-crops\`.
+Persists to `%APPDATA%\DdoGearScanner\` (`loadout.json`, `slotmap.json`, `settings.json`). Debug crops
+go to `debug-crops\`.
 
 The tool only reads pixels from the DDO window via Windows Graphics Capture. It never touches the
 game process, files, or network.
@@ -60,17 +61,20 @@ for OCR, OpenCvSharp4 for image processing.
 ```
 DdoGearScanner.sln
 src/
-  DdoGearScanner.Model/     pure data model (Mod, AugmentSlot, SetBonus, GearItem) — net8.0, no deps
+  DdoGearScanner.Model/     pure data model (Mod, AugmentSlot, SetBonus, GearItem, EquipSlot) — net8.0
   DdoGearScanner.Capture/   window capture (copied from pg-loot) + DDO window tracking + FrameGrabber
-  DdoGearScanner.Vision/    LocalOcr, tooltip region detection, ITooltipReader, parser, bonus-type list
-  DdoGearScanner/           WPF app: hotkey, capture pipeline, list window, click-through overlay
+  DdoGearScanner.Vision/    LocalOcr, TooltipChangeDetector (motion), TooltipTextParser, InventoryLocator
+  DdoGearScanner/           WPF app: low-level-hook hotkey, pipeline, loadout window, overlay,
+                            slot calibration (CalibrationController/SlotMap/SlotInfo), CaptureStore
 test/
-  DdoGearScanner.Vision.Tests/   TooltipTextParser fixtures
+  DdoGearScanner.Vision.Tests/   TooltipTextParser fixtures + dev diagnostics
+assets/
+  inventory/ragdoll.png     rag-doll anchor template for inventory slot detection
 ```
 
-Layering: `Model` ← `Vision` ← `App`; `Capture` is independent. The OCR backend is pluggable behind
-`ITooltipReader` (Phase 1 = local Windows OCR; Phase 2 = Claude vision). The trigger is pluggable
-behind `ICaptureTrigger` (Phase 1 = hotkey; later = auto-detect).
+Layering: `Model` ← `Vision` ← `App`; `Capture` is independent. **Read [CLAUDE.md](CLAUDE.md) for
+how detection actually works** — it diverged substantially from [PLAN.md](PLAN.md). The OCR backend
+is pluggable behind `ITooltipReader` (local Windows OCR today).
 
 ## Build & test
 

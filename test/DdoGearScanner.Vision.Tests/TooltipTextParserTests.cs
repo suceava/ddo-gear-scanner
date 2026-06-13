@@ -114,4 +114,50 @@ public class TooltipTextParserTests
         Assert.Equal("", item.Name);
         Assert.Empty(item.Mods);
     }
+
+    [Fact]
+    public void SkipsCurrentlyEquippedHeaderForName()
+    {
+        const string t =
+            "CURRENTLY EQUIPPED\n" +
+            "Morninglord's Khopesh\n" +
+            "Khopesh (one-handed)\n" +
+            "Equips to: Main Hand, Off Hand\n" +
+            "Minimum Level: 30\n" +
+            "Constitution +15";
+        GearItem item = TooltipTextParser.ParseText(t);
+        Assert.Equal("Morninglord's Khopesh", item.Name);
+        Assert.Equal(30, item.MinimumLevel);
+        Assert.Equal("Khopesh (one-handed)", item.ItemTypeText);
+    }
+
+    [Fact]
+    public void TypeLineUnderNameIsNotPartOfTheName()
+    {
+        const string t =
+            "CURRENTLY EQUIPPED\n" +
+            "Epic Templar's Mail\n" +
+            "Heavy Armor\n" +
+            "Minimum Level: 23\n" +
+            "Constitution +15";
+        GearItem item = TooltipTextParser.ParseText(t);
+        Assert.Equal("Epic Templar's Mail", item.Name);
+        Assert.Equal("Heavy Armor", item.ItemTypeText);
+        Assert.DoesNotContain("Heavy Armor", item.Mods.Select(m => m.Stat));
+    }
+
+    [Fact]
+    public void MultiLineNameThenTypeLine()
+    {
+        const string t =
+            "CURRENTLY EQUIPPED\n" +
+            "+5 Reinforced Silver\n" +
+            "Magecraft Buckler\n" +
+            "Buckler\n" +
+            "Minimum Level: 28\n" +
+            "Sheltering +20";
+        GearItem item = TooltipTextParser.ParseText(t);
+        Assert.Equal("+5 Reinforced Silver Magecraft Buckler", item.Name);
+        Assert.Equal("Buckler", item.ItemTypeText);
+    }
 }

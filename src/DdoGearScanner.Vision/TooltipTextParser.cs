@@ -34,17 +34,36 @@ public static partial class TooltipTextParser
 
         if (lines.Count == 0) return GearItem.Empty(raw);
 
-        string name = lines[0];
+        // The equipped-comparison tooltip leads with a "CURRENTLY EQUIPPED" header — the real name
+        // is below it. Skip such a header (OCR can mangle it, so match loosely). The name itself may
+        // wrap across lines, so gather lines until the first real field/content line.
+        int nameIdx = IsEquippedHeader(lines[0]) && lines.Count > 1 ? 1 : 0;
+        int classifyFrom = nameIdx;
+        string? itemTypeText = null;
+        List<string> nameParts = new();
+        while (classifyFrom < lines.Count && nameParts.Count < 3)
+        {
+            string l = lines[classifyFrom];
+            if (IsContentLine(l)) break;
+            // The type line (e.g. "Heavy Armor", "Tower Shield", "Bastard Sword (one-handed)") sits
+            // right under the name and looks like a name continuation — stop there and capture it.
+            if (nameParts.Count >= 1 && IsTypeLine(l)) { itemTypeText = l; classifyFrom++; break; }
+            // A standalone quality word ("Normal", "Rare", …) under the name — skip it.
+            if (nameParts.Count >= 1 && IsQualityLine(l)) { classifyFrom++; break; }
+            nameParts.Add(l);
+            classifyFrom++;
+        }
+        if (nameParts.Count == 0) { nameParts.Add(lines[nameIdx]); classifyFrom = nameIdx + 1; }
+        string name = string.Join(" ", nameParts);
         int? minLevel = null;
         EquipSlot slot = EquipSlot.Unknown;
-        string? itemTypeText = null;
         string? binding = null;
         List<Mod> mods = new();
         List<AugmentSlot> augments = new();
         List<SetBonus> setBonuses = new();
 
         // Skip the name line; classify the rest.
-        for (int i = 1; i < lines.Count; i++)
+        for (int i = classifyFrom; i < lines.Count; i++)
         {
             string line = lines[i];
 
@@ -206,6 +225,63 @@ public static partial class TooltipTextParser
     }
 
     // ---- helpers ----
+
+    private static bool IsEquippedHeader(string line)
+    {
+        string norm = new string(line.Where(char.IsLetter).ToArray()).ToLowerInvariant();
+        return norm.Contains("current") || norm.Contains("equipp");
+    }
+
+    // The name ends (and content begins) at the first of these. Deliberately reliable markers, so
+    // a multi-line name isn't truncated; the weapon/armor TYPE line is caught via "handed)" or the
+    // Armor/Weapon/Damage prefixes.
+    private static readonly string[] ContentMarkers =
+    {
+        "equips to", "bound to", "unbound", "proficiency", "accepts", "augment slot",
+        "damage:", "critical", "base value", "durability",
+    };
+
+    private static bool IsContentLine(string line)
+    {
+        if (MinLevelRe().IsMatch(line)) return true;
+        string l = line.ToLowerInvariant();
+        foreach (string m in ContentMarkers) if (l.Contains(m)) return true;
+        return false;
+    }
+
+    // Known DDO item-type lines (the line shown right under the name). A name CONTAINS type words
+    // ("Ring of the Djinn") but the type LINE equals one of these (after dropping a trailing
+    // "(one-handed)" etc.), so whole-line matching separates them.
+    private static readonly HashSet<string> ItemTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // armor
+        "cloth", "cloth armor", "light armor", "medium armor", "heavy armor", "docent", "outfit", "robe",
+        // shields / off-hand
+        "buckler", "small shield", "large shield", "tower shield", "orb",
+        // weapons
+        "dagger", "short sword", "long sword", "longsword", "rapier", "scimitar", "falchion", "khopesh",
+        "bastard sword", "great sword", "greatsword", "handaxe", "throwing axe", "battle axe", "great axe",
+        "greataxe", "dwarven war axe", "light mace", "heavy mace", "morningstar", "club", "light hammer",
+        "war hammer", "maul", "quarterstaff", "kama", "kukri", "sickle", "light pick", "heavy pick",
+        "handwraps", "throwing hammer", "throwing dagger", "dart", "shuriken", "light crossbow",
+        "heavy crossbow", "repeating crossbow", "great crossbow", "longbow", "shortbow", "long bow", "short bow",
+        // accessories (whole-line only)
+        "ring", "necklace", "amulet", "goggles", "helmet", "cloak", "belt", "bracers", "gloves",
+        "gauntlets", "boots", "trinket", "quiver", "arrows", "bolts",
+    };
+
+    private static readonly HashSet<string> Qualities = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "normal", "common", "uncommon", "rare", "epic", "legendary", "mythic", "masterful",
+    };
+
+    private static bool IsTypeLine(string line)
+    {
+        string t = Regex.Replace(line, @"\s*\([^)]*\)\s*$", "").Trim();
+        return ItemTypes.Contains(t);
+    }
+
+    private static bool IsQualityLine(string line) => Qualities.Contains(line.Trim());
 
     private static (string bonusType, string stat) SplitTypeAndStat(string text)
     {

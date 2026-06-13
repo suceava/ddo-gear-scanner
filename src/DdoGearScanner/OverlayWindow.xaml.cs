@@ -84,7 +84,9 @@ public partial class OverlayWindow : Window
         });
     }
 
-    public void ShowToast(string text, bool success)
+    /// <summary>Show a toast. When <paramref name="sticky"/>, it stays up until the next toast
+    /// (used for calibration prompts) instead of auto-hiding.</summary>
+    public void ShowToast(string text, bool success, bool sticky = false)
     {
         Dispatcher.Invoke(() =>
         {
@@ -94,7 +96,7 @@ public partial class OverlayWindow : Window
                 : Color.FromRgb(0xE0, 0xA0, 0x30));
             ToastBorder.Visibility = Visibility.Visible;
             _toastTimer.Stop();
-            _toastTimer.Start();
+            if (!sticky) _toastTimer.Start();
         });
     }
 }

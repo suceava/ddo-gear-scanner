@@ -23,15 +23,17 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 Margin="0,24,0,0"
+                MaxWidth="680"
                 Background="#E0101418"
                 BorderBrush="#FF35C26B"
                 BorderThickness="2"
                 CornerRadius="6"
-                Padding="16,10"
+                Padding="18,12"
                 Visibility="Collapsed">
             <TextBlock x:Name="ToastText"
                        FontFamily="Segoe UI"
-                       FontSize="14"
+                       FontSize="16"
+                       TextWrapping="Wrap"
                        Foreground="White"
                        Text="" />
         </Border>

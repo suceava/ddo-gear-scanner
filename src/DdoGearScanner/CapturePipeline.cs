@@ -44,6 +44,14 @@ public sealed class CapturePipeline
     private volatile bool _sessionActive;
     public event Action<bool>? SessionChanged;
 
+    // Optional inventory slot detection (rag-doll anchor + calibrated slot offsets).
+    private InventoryLocator? _invLocator;
+    private SlotMap? _slotMap;
+    public void SetInventory(InventoryLocator? locator, SlotMap? map) { _invLocator = locator; _slotMap = map; }
+    private Point _invAnchor;   // rag-doll position, cached from a recent clean frame
+    private bool _invOpen;      // was the rag-doll found in the last clean-frame check
+    private int _invTick;
+
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ddo-gear-scanner.log");
     private static void Log(string m) { try { File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} [session] {m}{Environment.NewLine}"); } catch { } }
     private int _sessionFrameCount;
@@ -77,11 +85,32 @@ public sealed class CapturePipeline
         Rect? region;
         try { region = _change.OnFrame(frame, cursor); }
         catch (Exception ex) { Log($"OnFrame error {ex.GetType().Name}: {ex.Message}"); return; }
+
+        // Cache the rag-doll anchor from CLEAN (no-tooltip) frames — at capture time a tooltip
+        // covers it. Throttled so the template match stays cheap.
+        if (_invLocator is not null && _change.LastFrameClean && (++_invTick % 20 == 0))
+        {
+            Point? a = _invLocator.Locate(frame);
+            _invOpen = a.HasValue;
+            if (a is Point pa) _invAnchor = pa;
+        }
+
         if (region is null) return;
         Log($"CAPTURE region x={region.Value.X} y={region.Value.Y} w={region.Value.Width} h={region.Value.Height}");
 
         Rect b = ClampRect(region.Value, frame);
         if (b.Width < 8 || b.Height < 8) return;
+
+        // Inventory slot: if calibrated and the paper-doll is open (from the cached clean-frame
+        // locate), find which equipment slot the cursor is over. On a slot → tag it. Inventory open
+        // but cursor NOT on a slot (a bag item) → skip the capture (only equipped gear).
+        EquipSlot? slot = null;
+        if (_slotMap is { IsCalibrated: true } && _invOpen)
+        {
+            slot = _slotMap.SlotAt(_invAnchor.X, _invAnchor.Y, cursor.X, cursor.Y);
+            if (slot is null) { Log("gated: inventory open, cursor not on an equipment slot"); return; }
+        }
+
         OpenCvMat crop = new OpenCvMat(frame, b).Clone();
 
         _ = Task.Run(async () =>
@@ -92,10 +121,12 @@ public sealed class CapturePipeline
                 DumpDebugCrop(png);
                 TooltipReadResult read = await _reader.ReadAsync(crop).ConfigureAwait(false);
                 GearItem? item = read.Item;
+                if (slot is EquipSlot s && item is not null) item = item with { Slot = s };
                 bool ok = item is not null && (!string.IsNullOrWhiteSpace(item.Name) || item.Mods.Count > 0);
-                if (ok) _store.Append(item!);
+                // Overwrite the slot in the loadout (re-capturing a slot updates it, not a new entry).
+                if (ok && item!.Slot != EquipSlot.Unknown) _store.SetSlot(item.Slot, item);
                 Emit(new CaptureOutcome(ok,
-                    ok ? $"Captured \"{item!.Name}\" ({item.Mods.Count} mods) — next piece" : "Tooltip seen but no text read.",
+                    ok ? $"Captured \"{item!.Name}\" → {SlotInfo.Label(item.Slot)}" : "Tooltip seen but no text read.",
                     item, read.RawText, read.Confidence, 1.0, read.Backend, png, b.X, b.Y, b.Width, b.Height));
             }
             finally { crop.Dispose(); }
@@ -176,7 +207,7 @@ public sealed class CapturePipeline
 
             if (item is not null && (!string.IsNullOrWhiteSpace(item.Name) || item.Mods.Count > 0))
             {
-                _store.Append(item);
+                if (item.Slot != EquipSlot.Unknown) _store.SetSlot(item.Slot, item);
                 Emit(new CaptureOutcome(
                     Success: true,
                     Message: $"Captured \"{item.Name}\" ({item.Mods.Count} mods)",

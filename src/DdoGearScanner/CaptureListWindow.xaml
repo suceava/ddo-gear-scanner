@@ -9,7 +9,6 @@
         Foreground="#E8EAED"
         TextElement.Foreground="#E8EAED">
     <Window.Resources>
-        <local:UtcToLocalTimeConverter x:Key="UtcLocal" />
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="#E8EAED" />
             <Setter Property="FontFamily" Value="Segoe UI" />
@@ -27,20 +26,32 @@
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="Margin" Value="0,0,8,0" />
         </Style>
-        <Style TargetType="GridViewColumnHeader">
-            <Setter Property="Background" Value="#252932" />
-            <Setter Property="Foreground" Value="#E8EAED" />
-            <Setter Property="BorderBrush" Value="#31363F" />
-            <Setter Property="Padding" Value="8,4" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-        </Style>
-        <Style TargetType="ListViewItem">
-            <Setter Property="Foreground" Value="#E8EAED" />
-            <Setter Property="Background" Value="Transparent" />
-        </Style>
         <Style TargetType="TextBox">
             <Setter Property="Background" Value="#11141A" />
             <Setter Property="Foreground" Value="#C8CCD2" />
+        </Style>
+        <!-- Loadout slot row -->
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="#E8EAED" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6" Margin="0,1" Padding="10,7">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#2A3550" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#232733" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -55,7 +66,7 @@
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
             <TextBlock Text="DDO Gear Scanner" FontSize="18" FontWeight="SemiBold" />
             <TextBlock x:Name="StatusText" Foreground="#9AA0AB" FontSize="12" Margin="0,4,0,0"
-                       Text="Press the hotkey to start detection, then hover each gear piece in DDO." />
+                       Text="Press the hotkey to start detection, then hover each equipped gear piece." />
         </StackPanel>
 
         <!-- Toolbar -->
@@ -63,13 +74,14 @@
             <Button x:Name="DetectionButton" Content="Detection: OFF" Click="DetectionToggle_Click" />
             <Button x:Name="ScanButton" Content="Scan now" Click="ScanNow_Click" />
             <Button x:Name="SetHotkeyButton" Content="Set hotkey" Click="SetHotkey_Click" />
+            <Button x:Name="CalibrateButton" Content="Calibrate slots" Click="Calibrate_Click" />
             <Button x:Name="DetectButton" Content="Detect game window" Click="DetectGameWindow_Click" />
-            <Button x:Name="ClearButton" Content="Clear list" Click="ClearList_Click" />
+            <Button x:Name="ClearButton" Content="Clear loadout" Click="ClearList_Click" />
             <TextBlock x:Name="HotkeyHint" VerticalAlignment="Center" Foreground="#9AA0AB"
                        FontSize="12" Margin="6,0,0,0" Text="" />
         </StackPanel>
 
-        <!-- Main split: list (left) | info (right) -->
+        <!-- Loadout sheet (left) | item detail (right) -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -77,31 +89,47 @@
                 <ColumnDefinition Width="430" />
             </Grid.ColumnDefinitions>
 
-            <!-- Captured list -->
             <Border Grid.Column="0" Background="#1E2127" CornerRadius="8" Padding="6">
-                <ListView x:Name="ItemsList" Background="Transparent" BorderThickness="0" Foreground="#E8EAED"
-                          SelectionChanged="ItemsList_SelectionChanged">
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Time" Width="70"
-                                            DisplayMemberBinding="{Binding CapturedUtc, Converter={StaticResource UtcLocal}}" />
-                            <GridViewColumn Header="Name" Width="240" DisplayMemberBinding="{Binding Name}" />
-                            <GridViewColumn Header="ML" Width="40" DisplayMemberBinding="{Binding MinimumLevel}" />
-                            <GridViewColumn Header="Slot" Width="80" DisplayMemberBinding="{Binding Slot}" />
-                            <GridViewColumn Header="Mods" Width="46" DisplayMemberBinding="{Binding Mods.Count}" />
-                            <GridViewColumn Header="Named" Width="52" DisplayMemberBinding="{Binding IsLikelyNamed}" />
-                        </GridView>
-                    </ListView.View>
-                </ListView>
+                <ListBox x:Name="SlotSheet" Background="Transparent" BorderThickness="0"
+                         HorizontalContentAlignment="Stretch" SelectionChanged="SlotSheet_SelectionChanged">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="78" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="#7C9CFF"
+                                           FontSize="11" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Name}" FontSize="14">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="#E8EAED" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasItem}" Value="False">
+                                                        <Setter Property="Foreground" Value="#5B6270" />
+                                                        <Setter Property="FontWeight" Value="Normal" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="#9AA0AB" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </Border>
 
             <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="#16181D" />
 
-            <!-- Capture info -->
+            <!-- Item detail -->
             <Border Grid.Column="2" Background="#1E2127" CornerRadius="8" Padding="14">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <!-- Captured tooltip image at the top -->
                         <Border Background="#11141A" CornerRadius="6" Padding="6" Margin="0,0,0,10">
                             <Image x:Name="CropImage" MaxHeight="320" Stretch="Uniform"
                                    HorizontalAlignment="Center"
@@ -109,7 +137,7 @@
                         </Border>
 
                         <TextBlock x:Name="LastName" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap"
-                                   Text="(select a capture)" />
+                                   Text="(select a slot)" />
                         <TextBlock x:Name="LastMeta" Foreground="#9AA0AB" FontSize="12" Margin="0,3,0,0" />
                         <TextBlock x:Name="LastReadInfo" Foreground="#6B7280" FontSize="11" Margin="0,2,0,0" />
 

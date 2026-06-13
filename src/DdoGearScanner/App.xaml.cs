@@ -45,6 +45,13 @@ public partial class App : Application
         CapturePipeline pipeline = new(_tracker, _grabber, detector, reader, store);
         _coordinator.FrameArrived += pipeline.OnFrame; // drives the detection session
 
+        // Inventory slot detection (rag-doll anchor + calibrated slot offsets).
+        string ragPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Inventory", "ragdoll.png");
+        InventoryLocator? invLocator = InventoryLocator.TryLoad(ragPath);
+        SlotMap slotMap = SlotMap.Load();
+        pipeline.SetInventory(invLocator, slotMap);
+        CalibrationController calibration = new(_tracker, _grabber, invLocator, slotMap);
+
         // Overlay (click-through status toast) + main interactive list window.
         OverlayWindow overlay = new();
         overlay.Show();
@@ -53,6 +60,8 @@ public partial class App : Application
         CaptureListWindow main = new(store, settings, reader.IsAvailable);
         main.ScanRequested += pipeline.RequestCapture;
         main.DetectionToggleRequested += () => pipeline.ToggleSession();
+        main.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
+        calibration.Status += s => { main.SetStatusText(s); overlay.ShowToast(s, true, sticky: true); };
         main.Show();
 
         // Route pipeline results to both windows (marshaled to UI thread inside the handlers).
@@ -73,7 +82,7 @@ public partial class App : Application
         // is whatever the user configured; if it's taken by another app the user rebinds it
         // explicitly via "Set hotkey" (no silent random reassignment).
         _trigger = new HotkeyTrigger(main, settings.HotkeyModifiers, settings.HotkeyVk);
-        _trigger.Triggered += _ => pipeline.ToggleSession();
+        _trigger.Triggered += _ => { if (calibration.Active) calibration.Record(); else pipeline.ToggleSession(); };
         _trigger.Start();
 
         // Self-heal: if the saved combo is unavailable (taken by another app), fall back to the
