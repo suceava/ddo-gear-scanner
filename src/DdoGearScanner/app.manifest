@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="DdoGearScanner.app" />
+
+  <!-- Run at the invoker's integrity (no UAC). The low-level keyboard hook fires over DDO as long
+       as we're at the same integrity level — and DDO runs un-elevated (it never prompts for UAC),
+       so we don't need admin either. If a future setup runs DDO elevated, the hook would need a
+       matching elevation. -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <!-- Per-monitor-v2 DPI awareness so GetCursorPos / GetClientRect / ClientToScreen all return
+       physical pixels that line up with the Windows.Graphics.Capture frame. Without this, cursor
+       -> frame coordinate mapping drifts on scaled displays. -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+
+  <!-- Target Windows 10 / 11 for Windows.Graphics.Capture + Windows.Media.Ocr. -->
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    </application>
+  </compatibility>
+</assembly>

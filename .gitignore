@@ -1,0 +1,21 @@
+## .NET / Visual Studio
+bin/
+obj/
+dist/
+.vs/
+*.user
+*.suo
+*.usertasks
+
+## Build / publish output
+[Dd]ebug/
+[Rr]elease/
+publish/
+
+## Rider / VS Code
+.idea/
+.vscode/
+
+## OS
+Thumbs.db
+desktop.ini

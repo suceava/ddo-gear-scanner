@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>DdoGearScanner</RootNamespace>
+    <AssemblyName>DdoGearScanner</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DdoGearScanner.Capture\DdoGearScanner.Capture.csproj" />
+    <ProjectReference Include="..\DdoGearScanner.Vision\DdoGearScanner.Vision.csproj" />
+    <ProjectReference Include="..\DdoGearScanner.Model\DdoGearScanner.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tooltip corner-ornament template(s), copied next to the exe for the detector to load. -->
+    <Content Include="..\..\assets\templates\*.png" Link="Templates\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

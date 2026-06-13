@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure data model, no Windows / OpenCV / WPF dependencies. Kept on the plain
+       net8.0 TFM so it can be reused by a future web/export component and so the
+       Phase-2 Claude reader can deserialize JSON straight into these records. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
