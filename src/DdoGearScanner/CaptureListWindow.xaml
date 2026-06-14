@@ -151,8 +151,9 @@
                                             <ColumnDefinition Width="52" />
                                             <ColumnDefinition Width="120" />
                                         </Grid.ColumnDefinitions>
+                                        <!-- Split model (DDOBuilderV2): Stat name | Value | BonusType. -->
                                         <TextBlock Grid.Column="0" Text="{Binding Stat}" TextWrapping="Wrap" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Value}" Foreground="#7FE0A0"
+                                        <TextBlock Grid.Column="1" Text="{Binding ValueText}" Foreground="#7FE0A0"
                                                    HorizontalAlignment="Right" />
                                         <TextBlock Grid.Column="2" Text="{Binding BonusType}" Foreground="#7C9CFF"
                                                    Margin="10,0,0,0" />

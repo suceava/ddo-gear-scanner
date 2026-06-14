@@ -35,6 +35,9 @@ public enum AugmentColor
     Orange,
     Purple,
     Green,
+    Moon,
+    Sun,
+    Globe,
 }
 
 /// <summary>
@@ -43,8 +46,18 @@ public enum AugmentColor
 /// no explicit type prefix — that's the DDO convention. The bonus type is what makes the
 /// web planner's stacking math work (same type doesn't stack, highest wins), so it is a
 /// first-class field even though it is the hardest thing to OCR reliably.
+/// <paramref name="IsPercent"/> distinguishes a percent mod ("Fortification +117%") from a flat one
+/// ("Constitution +10") — the "+N" reads the same number either way, so the unit must be stored.
+/// <paramref name="Description"/> is the mod's prose (the text after the affix name) when present —
+/// retained because for named effects (e.g. "Gird Against Demons") the description IS the effect.
 /// </summary>
-public sealed record Mod(string Stat, double Value, string BonusType = "Enhancement");
+public sealed record Mod(
+    string Stat, double Value, string BonusType = "Enhancement", bool IsPercent = false, string? Description = null)
+{
+    /// <summary>Value formatted for display, with a trailing % for percent mods.</summary>
+    public string ValueText => Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+                               + (IsPercent ? "%" : string.Empty);
+}
 
 /// <summary>An augment slot on the item. <see cref="IsEmpty"/> slots are upgrade gaps.</summary>
 public sealed record AugmentSlot(AugmentColor Color, string? Filled, bool IsEmpty);

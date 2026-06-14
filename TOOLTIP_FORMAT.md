@@ -22,11 +22,16 @@ Phase-2 Claude vision reader is meant to replace.
 2. **Minimum Level: N** — `Minimum Level[:\s]*N`.
 3. **Item type / slot** — e.g. `Cloak`, `Ring`, `Armor: Medium`, `Weapon: Longsword`. Mapped to an
    `EquipSlot` where unambiguous (Ring → Ring1; user re-files Ring2 manually).
-4. **Mods / enchantments** — the bulk. Usually `[<BonusType>] <Stat> +N`:
-   - `Constitution +14` → Stat=Constitution, Value=14, **BonusType=Enhancement** (the default when
-     no explicit type word leads the line).
-   - `Insightful Healing Amplification +28` → BonusType=Insightful, Stat="Healing Amplification".
-   - Valueless named effects (`True Seeing`, `Feather Falling`) are kept as mods with Value 0.
+4. **Mods / enchantments** — the bulk. Each affix is prefixed in-game by a small filled gold
+   **▶ triangle** and reads `<affix name> +N: <description>` where the description restates the
+   value and names the bonus type. See **Mod segmentation by ▶ bullets** below — this is how mods
+   are split. Within a mod: Stat from the head (before the colon), Value once, BonusType from the
+   description (`+N <Type> bonus`):
+   - `Constitution +6: Passive: +6 Enhancement bonus to Constitution` → Stat=Constitution, Value=6,
+     BonusType=Enhancement (the default when no type word is found).
+   - `Insightful Physical Sheltering +9: …+9 Insight bonus…` → Stat="Physical Sheltering",
+     BonusType=Insightful (a known type word leading the name OR named in the description).
+   - Valueless named effects (`Increased Weapon Die`, `Manslayer`) are kept as mods with Value 0.
 5. **Augment slots** — `(Empty )?<Color> Augment Slot`. Colors: Colorless, Blue, Yellow, Red,
    Orange, Purple, Green. **Empty slots are upgrade gaps.** A filled slot may show the augment name
    after a colon.
@@ -48,6 +53,27 @@ reliable end-of-top-block boundary (it's right-justified in-game but OCRs as its
 
 NOTE: for equipped items the **calibrated inventory slot overrides** the parser's slot — slot
 detection comes from the paper-doll position, not this text.
+
+## Mod segmentation by ▶ bullets (the reliable delimiter)
+
+Text alone CANNOT delimit mods: the ▶ glyph is dropped by OCR, and descriptions contain colon
+phrases (`Passive:`, `Weapons and Shields:`) and restated `+N` values, so neither "colon" nor
+"value-first" separates an affix line from its description. The gold **▶ triangle** is the only
+reliable delimiter. `BulletDetector` finds them geometrically (so it's crop-agnostic):
+
+1. mask the gold core (high R/G, low B),
+2. keep small contours approximating a **3-vertex, left-of-center** (right-pointing) triangle,
+3. keep only the **dominant x-column** — bullets share an x; gold *keyword* text (DDO highlights
+   description keywords in gold too) scatters off-column,
+4. drop size-outliers in that column.
+
+It returns the bullets' Y-centres in the OCR image's pixel space. `TooltipTextParser.Parse(lines,
+bulletYs)` then assigns each OCR row to the nearest bullet at/above it (rows above the first bullet
+= header; rows at/after the first footer marker — Augments / Set Bonuses / Base Value — = footer),
+joins each ▶ block, and runs `ExtractModFromBlock` to produce exactly **one mod per bullet**. This
+is what removes run-together and double-counting. If no bullets are detected it falls back to the
+old line-by-line parse. Detection + OCR MUST run on the same image (the reader uses the 3x-upscaled
+crop for both). Verified on a real shield crop: 8 ▶ → 8 clean mods.
 
 ## Bonus types (the stacking-critical field)
 

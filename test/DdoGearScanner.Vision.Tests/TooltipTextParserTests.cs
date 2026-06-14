@@ -14,7 +14,7 @@ public class TooltipTextParserTests
         "Cloak\n" +
         "Constitution +14\n" +
         "Insightful Healing Amplification +28\n" +
-        "Green Augment Slot\n" +
+        "Green Augment Slot: Topaz of Power\n" +
         "Empty Colorless Augment Slot\n" +
         "Sentinel's Aspect Set\n" +
         "Bound to Character on Acquire";

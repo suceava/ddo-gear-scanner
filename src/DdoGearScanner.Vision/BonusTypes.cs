@@ -28,6 +28,7 @@ public static class BonusTypes
         "Artifact",
         "Festive",
         "Morale",
+        "Mythic",
         "Luck",
         "Resistance",
         "Deflection",
@@ -46,4 +47,14 @@ public static class BonusTypes
         new(All, StringComparer.OrdinalIgnoreCase);
 
     public static bool IsKnown(string word) => Lookup.Contains(word.Trim());
+
+    /// <summary>Returns the canonically-cased vocabulary entry (e.g. "resistance" -> "Resistance"),
+    /// or the trimmed input unchanged if it isn't a known type.</summary>
+    public static string Canonical(string word)
+    {
+        string w = word.Trim();
+        foreach (string t in All)
+            if (t.Equals(w, StringComparison.OrdinalIgnoreCase)) return t;
+        return w;
+    }
 }

@@ -20,13 +20,28 @@ public sealed class LocalOcrTooltipReader : ITooltipReader
     public bool IsAvailable => _ocr.IsAvailable;
 
     public Task<TooltipReadResult> ReadAsync(OpenCvMat tooltipBgr, CancellationToken ct = default)
+        => ReadAsync(tooltipBgr, null, null, ct);
+
+    /// <summary>
+    /// As <see cref="ReadAsync(OpenCvMat, CancellationToken)"/>, but when <paramref name="debugDir"/>
+    /// and <paramref name="label"/> are set, also writes a full diagnostic bundle
+    /// (<see cref="TooltipDebugDump"/>) so any mis-parse is reproducible from disk.
+    /// </summary>
+    public Task<TooltipReadResult> ReadAsync(
+        OpenCvMat tooltipBgr, string? debugDir, string? label, CancellationToken ct = default)
     {
         if (tooltipBgr.Empty())
             return Task.FromResult(new TooltipReadResult(null, string.Empty, 0, BackendName));
 
         using OpenCvMat prepped = Preprocess(tooltipBgr);
         IReadOnlyList<OcrLine> lines = _ocr.Recognize(prepped);
-        GearItem item = TooltipTextParser.Parse(lines);
+        // The gold ▶ mod-bullets delimit mods reliably where text can't. Detected on the SAME
+        // preprocessed image so the bullet Y-centres line up with the OCR line boxes.
+        IReadOnlyList<int> bullets = BulletDetector.DetectYCenters(prepped, out BulletDetector.Diagnostics bdiag);
+        GearItem item = TooltipTextParser.Parse(lines, bullets, out List<TooltipTextParser.ModBlock> blocks);
+
+        if (!string.IsNullOrEmpty(debugDir) && !string.IsNullOrEmpty(label))
+            TooltipDebugDump.Write(debugDir!, label!, prepped, lines, bdiag, blocks, item, BackendName);
 
         double confidence = ScoreConfidence(item, lines.Count);
         return Task.FromResult(new TooltipReadResult(item, item.RawOcrText, confidence, BackendName));

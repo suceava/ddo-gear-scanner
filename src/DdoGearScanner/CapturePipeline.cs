@@ -118,8 +118,8 @@ public sealed class CapturePipeline
             try
             {
                 byte[] png = EncodePng(crop);
-                DumpDebugCrop(png);
-                TooltipReadResult read = await _reader.ReadAsync(crop).ConfigureAwait(false);
+                string? label = StartDebugDump(png);
+                TooltipReadResult read = await ReadWithOptionalDebug(crop, label).ConfigureAwait(false);
                 GearItem? item = read.Item;
                 if (slot is EquipSlot s && item is not null) item = item with { Slot = s };
                 bool ok = item is not null && (!string.IsNullOrWhiteSpace(item.Name) || item.Mods.Count > 0);
@@ -200,9 +200,9 @@ public sealed class CapturePipeline
             Rect bounds = region.Value.Bounds;
             using OpenCvMat crop = new(frame, bounds);
             byte[] cropPng = EncodePng(crop);
-            DumpDebugCrop(cropPng);
+            string? label = StartDebugDump(cropPng);
 
-            TooltipReadResult read = await _reader.ReadAsync(crop).ConfigureAwait(false);
+            TooltipReadResult read = await ReadWithOptionalDebug(crop, label).ConfigureAwait(false);
             GearItem? item = read.Item;
 
             if (item is not null && (!string.IsNullOrWhiteSpace(item.Name) || item.Mods.Count > 0))
@@ -243,18 +243,30 @@ public sealed class CapturePipeline
         return bytes;
     }
 
-    private static void DumpDebugCrop(byte[] pngBytes)
+    private static string DebugDir => Path.Combine(AppSettings.AppDataDir, "debug-crops");
+
+    /// <summary>When debug dumping is on, write the raw crop as crop-&lt;label&gt;.png and return the
+    /// shared label so the reader's diagnostic bundle (&lt;label&gt;-detect.png / -report.txt) lines
+    /// up with it. Returns null when debug dumping is off.</summary>
+    private static string? StartDebugDump(byte[] pngBytes)
     {
-        if (!AppSettings.Instance.DebugDumpCrops) return;
+        if (!AppSettings.Instance.DebugDumpCrops) return null;
         try
         {
-            string dir = Path.Combine(AppSettings.AppDataDir, "debug-crops");
-            Directory.CreateDirectory(dir);
-            string path = Path.Combine(dir, $"crop-{DateTime.Now:yyyyMMdd-HHmmss-fff}.png");
-            File.WriteAllBytes(path, pngBytes);
+            Directory.CreateDirectory(DebugDir);
+            string label = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff");
+            File.WriteAllBytes(Path.Combine(DebugDir, $"crop-{label}.png"), pngBytes);
+            return label;
         }
-        catch { /* debug only */ }
+        catch { return null; }
     }
+
+    /// <summary>Read the crop, additionally writing the full diagnostic bundle when a debug label is
+    /// present and the reader supports it (the local OCR reader does).</summary>
+    private Task<TooltipReadResult> ReadWithOptionalDebug(OpenCvMat crop, string? label)
+        => label is not null && _reader is LocalOcrTooltipReader local
+            ? local.ReadAsync(crop, DebugDir, label)
+            : _reader.ReadAsync(crop);
 
     // Full frame alongside the crop, with the cursor position (frame px) encoded in the filename,
     // so detection geometry can be tuned offline against reality.

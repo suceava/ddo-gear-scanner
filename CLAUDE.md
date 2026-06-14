@@ -45,11 +45,19 @@ labels) and presses Insert. At capture the pipeline caches the anchor from CLEAN
 (`LastFrameClean`), tags the item with its slot, and SKIPS captures where the inventory is open but
 the cursor isn't on a slot (ignores bag items). `SlotInfo` holds the slot order + labels.
 
-**Parsing** (`TooltipTextParser`, still crude but improving): skips a "CURRENTLY EQUIPPED" header,
-gathers a multi-line name, stops at the known item-type line (Heavy Armor / Tower Shield / Bastard
-Sword (one-handed) — captured as ItemTypeText) / quality line / "Equips to:" / Min Level. Mods are
-`Stat +N (BonusType)`; bonus type still often buried in sentences ("+13 Competence Bonus to…").
-The calibrated SLOT overrides the parser's slot for equipped items.
+**Parsing** (`TooltipTextParser`): skips a "CURRENTLY EQUIPPED" header, gathers a multi-line name,
+stops at the known item-type line (Heavy Armor / Tower Shield / Bastard Sword (one-handed) —
+captured as ItemTypeText) / quality line / "Equips to:" / Min Level. The calibrated SLOT overrides
+the parser's slot for equipped items.
+
+**Mods are segmented by the gold ▶ bullets, NOT by text** (`BulletDetector` + the `Parse(lines,
+bulletYs)` overload). Text can't delimit mods — the ▶ is dropped by OCR and descriptions contain
+colons + restated values. `BulletDetector` finds the ▶ glyphs geometrically (small 3-vertex
+right-pointing gold triangles sharing a dominant x-column; DDO's gold keyword-text is rejected by
+shape/column), returns their Y-centres, and the parser slices OCR rows into one ▶-block-per-mod,
+extracting Stat+Value from the head and BonusType from the description (`+N <Type> bonus`). This
+killed the run-together + double-counting. Detection + OCR run on the SAME 3x-upscaled crop so the
+coordinates line up. Falls back to line-by-line parse when no bullets are found. See TOOLTIP_FORMAT.md.
 
 ## Where things live
 
