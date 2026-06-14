@@ -15,4 +15,8 @@
     <ProjectReference Include="..\DdoGearScanner.Model\DdoGearScanner.Model.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Data\gear-priorities.json" />
+  </ItemGroup>
+
 </Project>

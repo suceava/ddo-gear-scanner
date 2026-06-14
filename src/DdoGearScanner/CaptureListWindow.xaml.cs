@@ -196,6 +196,12 @@ public partial class CaptureListWindow : Window
         StatusText.Text = "Loadout cleared.";
     }
 
+    private void Matrix_Click(object sender, RoutedEventArgs e)
+    {
+        var matrix = Vision.StackingAnalyzer.Analyze(_store.Loadout);
+        new MatrixWindow(matrix) { Owner = this }.Show();
+    }
+
     private void DetectGameWindow_Click(object sender, RoutedEventArgs e)
     {
         List<WindowInfo> windows = GameWindowTracker.EnumerateCandidateWindows();

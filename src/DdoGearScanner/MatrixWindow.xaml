@@ -1,0 +1,70 @@
+<Window x:Class="DdoGearScanner.MatrixWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Stacking Matrix" Width="1100" Height="700"
+        WindowStartupLocation="CenterScreen"
+        Background="#14161B" Foreground="#E8EAED" TextElement.Foreground="#E8EAED"
+        TextOptions.TextFormattingMode="Display">
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E8EAED" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="12.5" />
+        </Style>
+    </Window.Resources>
+    <DockPanel Margin="0">
+        <!-- Header band -->
+        <Border DockPanel.Dock="Top" Background="#1B1E26" Padding="20,14">
+            <StackPanel>
+                <TextBlock Text="Stacking Matrix" FontSize="19" FontWeight="SemiBold" />
+                <TextBlock x:Name="Summary" Foreground="#9AA0AB" Margin="0,3,0,0" FontSize="12.5" />
+            </StackPanel>
+        </Border>
+
+        <!-- Legend + controls -->
+        <Border DockPanel.Dock="Top" Background="#16181D" Padding="20,9"
+                BorderBrush="#262A33" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <CheckBox x:Name="ConflictsOnly" DockPanel.Dock="Right" Content="Conflicts only"
+                          Foreground="#C8CCD2" VerticalAlignment="Center" Checked="ConflictsOnly_Changed"
+                          Unchecked="ConflictsOnly_Changed" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#163326" CornerRadius="9" Padding="9,2" Margin="0,0,8,0">
+                        <TextBlock Text="+N counts" Foreground="#7FE0A0" />
+                    </Border>
+                    <Border Background="#3A2422" CornerRadius="9" Padding="9,2" Margin="0,0,8,0">
+                        <TextBlock Text="+N overridden" Foreground="#E0726A"
+                                   TextDecorations="Strikethrough" />
+                    </Border>
+                    <TextBlock Text="A/B/C = gear priority · &quot;= N&quot; shows a sum only where a type actually stacks"
+                               Foreground="#9AA0AB" VerticalAlignment="Center" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.IsSharedSizeScope="True">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Frozen header (scrolls horizontally in sync with the body, but never vertically) -->
+            <ScrollViewer x:Name="HeaderScroll" Grid.Row="0" Padding="20,0" Background="#22262F"
+                          HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+                <Grid x:Name="HeaderGrid" />
+            </ScrollViewer>
+
+            <ScrollViewer x:Name="BodyScroll" Grid.Row="1" Padding="20,0,20,12"
+                          HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                          ScrollChanged="BodyScroll_ScrollChanged">
+                <StackPanel>
+                    <Grid x:Name="MatrixGrid" />
+                    <TextBlock x:Name="NamedHeader" Foreground="#E6B45C" FontWeight="SemiBold" FontSize="13"
+                               Margin="2,24,0,2" Text="Item-local effects  (weapon/armor enchants &amp; procs — only affect their own item)"
+                               Visibility="Collapsed" />
+                    <StackPanel x:Name="NamedList" />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </DockPanel>
+</Window>

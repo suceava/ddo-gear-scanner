@@ -76,6 +76,7 @@
             <Button x:Name="SetHotkeyButton" Content="Set hotkey" Click="SetHotkey_Click" />
             <Button x:Name="CalibrateButton" Content="Calibrate slots" Click="Calibrate_Click" />
             <Button x:Name="DetectButton" Content="Detect game window" Click="DetectGameWindow_Click" />
+            <Button x:Name="MatrixButton" Content="Stacking matrix" Click="Matrix_Click" />
             <Button x:Name="ClearButton" Content="Clear loadout" Click="ClearList_Click" />
             <TextBlock x:Name="HotkeyHint" VerticalAlignment="Center" Foreground="#9AA0AB"
                        FontSize="12" Margin="6,0,0,0" Text="" />
