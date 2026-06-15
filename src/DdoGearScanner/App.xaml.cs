@@ -56,6 +56,9 @@ public partial class App : Application
         calibration.Status += s => { main.SetStatusText(s); overlay.ShowToast(s, true, sticky: true); };
         main.Show();
 
+        if (slotMap.IsDefault && reader.IsAvailable)
+            main.SetStatusText("Using the built-in 2560×1440 slot calibration. If slots don't detect, recalibrate via ☰ Menu → Calibrate Slots.");
+
         // Route pipeline results to both windows (marshaled to UI thread inside the handlers).
         pipeline.Completed += outcome =>
         {

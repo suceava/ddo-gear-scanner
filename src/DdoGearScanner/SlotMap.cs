@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DdoGearScanner.Model;
@@ -28,6 +29,11 @@ public sealed class SlotMap
 
     [JsonIgnore]
     public bool IsCalibrated => Offsets.Count > 0;
+
+    /// <summary>True when the calibration came from the baked-in default (no on-disk file yet). The
+    /// default was captured at 2560x1440; the user should recalibrate if their slots don't detect.</summary>
+    [JsonIgnore]
+    public bool IsDefault { get; private set; }
 
     public void Set(EquipSlot slot, int dx, int dy) => Offsets[slot] = new[] { dx, dy };
 
@@ -59,7 +65,27 @@ public sealed class SlotMap
             }
         }
         catch { }
+
+        // No saved calibration yet — fall back to the baked-in default (works at 2560x1440).
+        SlotMap? def = LoadEmbeddedDefault();
+        if (def is not null) { def.IsDefault = true; return def; }
         return new SlotMap();
+    }
+
+    private static SlotMap? LoadEmbeddedDefault()
+    {
+        try
+        {
+            Assembly asm = typeof(SlotMap).Assembly;
+            string? name = asm.GetManifestResourceNames()
+                .FirstOrDefault(n => n.EndsWith("default-slotmap.json", StringComparison.OrdinalIgnoreCase));
+            if (name is null) return null;
+            using Stream? s = asm.GetManifestResourceStream(name);
+            if (s is null) return null;
+            using StreamReader r = new(s);
+            return JsonSerializer.Deserialize<SlotMap>(r.ReadToEnd(), JsonOpts);
+        }
+        catch { return null; }
     }
 
     public void Save()

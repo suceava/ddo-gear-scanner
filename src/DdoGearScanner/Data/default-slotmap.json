@@ -1,0 +1,20 @@
+{
+  "Offsets": {
+    "Helmet": [ -4, -20 ],
+    "Necklace": [ 44, -22 ],
+    "Trinket": [ 93, -11 ],
+    "Cloak": [ 92, 34 ],
+    "Belt": [ 93, 77 ],
+    "Ring2": [ 92, 120 ],
+    "Gloves": [ 42, 137 ],
+    "Boots": [ -3, 136 ],
+    "Ring1": [ -43, 124 ],
+    "Bracers": [ -45, 83 ],
+    "Armor": [ -44, 33 ],
+    "Goggles": [ -44, -9 ],
+    "MainHand": [ -44, 189 ],
+    "OffHand": [ -4, 190 ],
+    "Quiver": [ 47, 193 ]
+  },
+  "Radius": 26
+}

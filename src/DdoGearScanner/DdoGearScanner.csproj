@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <Resource Include="appicon.ico" />
+    <!-- Baked-in default slot calibration (captured at 2560x1440) used when none exists on disk. -->
+    <EmbeddedResource Include="Data\default-slotmap.json" />
   </ItemGroup>
 
 </Project>
