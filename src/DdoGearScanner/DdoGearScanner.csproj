@@ -9,12 +9,17 @@
     <RootNamespace>DdoGearScanner</RootNamespace>
     <AssemblyName>DdoGearScanner</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>appicon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DdoGearScanner.Capture\DdoGearScanner.Capture.csproj" />
     <ProjectReference Include="..\DdoGearScanner.Vision\DdoGearScanner.Vision.csproj" />
     <ProjectReference Include="..\DdoGearScanner.Model\DdoGearScanner.Model.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="appicon.ico" />
   </ItemGroup>
 
   <ItemGroup>

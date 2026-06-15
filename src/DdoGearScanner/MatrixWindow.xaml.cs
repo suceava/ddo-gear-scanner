@@ -17,19 +17,22 @@ namespace DdoGearScanner;
 /// </summary>
 public partial class MatrixWindow : Window
 {
-    private static readonly Brush CountFg = Frozen(0x7F, 0xE0, 0xA0);
-    private static readonly Brush CountBg = Frozen(0x16, 0x33, 0x26);
-    private static readonly Brush OverFg = Frozen(0xE0, 0x72, 0x6A);
-    private static readonly Brush OverBg = Frozen(0x35, 0x22, 0x20);
-    private static readonly Brush TotalFg = Frozen(0x9C, 0xC0, 0xFF);
-    private static readonly Brush TotalBg = Frozen(0x1E, 0x2A, 0x42);
-    private static readonly Brush HeaderFg = Frozen(0x8A, 0x90, 0x9C);
-    private static readonly Brush HeaderStrong = Frozen(0xCE, 0xD3, 0xDC);
-    private static readonly Brush Amber = Frozen(0xE6, 0xB4, 0x5C);
-    private static readonly Brush Faint = Frozen(0x3A, 0x3F, 0x49);
-    private static readonly Brush RowBg = Frozen(0x1A, 0x1D, 0x24);
-    private static readonly Brush ChipBg = Frozen(0x23, 0x27, 0x31);
-    private static readonly Brush Section = Frozen(0x6F, 0x8A, 0xC9);
+    private static readonly Brush CountFg = Frozen(0x8F, 0xCF, 0x8A);   // counts — natural green
+    private static readonly Brush CountBg = Frozen(0x18, 0x2C, 0x1A);
+    private static readonly Brush OverFg = Frozen(0xDA, 0x6E, 0x5E);    // overridden — muted red
+    private static readonly Brush OverBg = Frozen(0x35, 0x20, 0x1C);
+    private static readonly Brush TotalFg = Frozen(0xE6, 0xC6, 0x6A);   // gold
+    private static readonly Brush TotalBg = Frozen(0x2E, 0x26, 0x16);
+    private static readonly Brush HeaderFg = Frozen(0x9C, 0x8E, 0x70);  // muted parchment
+    private static readonly Brush HeaderStrong = Frozen(0xCC, 0xC2, 0xA6);
+    private static readonly Brush Amber = Frozen(0xE6, 0xC6, 0x6A);     // gold accent
+    private static readonly Brush Faint = Frozen(0x3A, 0x30, 0x1E);
+    private static readonly Brush RowBg = Frozen(0x1E, 0x18, 0x10);     // warm zebra
+    private static readonly Brush ChipBg = Frozen(0x2A, 0x22, 0x14);
+    private static readonly Brush Section = Frozen(0xC9, 0xA2, 0x4B);   // gold section heads
+    private static readonly Brush TierGold = Frozen(0xE6, 0xC6, 0x6A);
+    private static readonly Brush TierSilver = Frozen(0xC6, 0xCA, 0xD2);
+    private static readonly Brush TierBronze = Frozen(0xC1, 0x83, 0x49);
 
     private const double StatColWidth = 260;
 
@@ -38,6 +41,7 @@ public partial class MatrixWindow : Window
     public MatrixWindow(StackingMatrix matrix)
     {
         InitializeComponent();
+        WindowChrome.UseDarkTitleBar(this);
         _matrix = matrix;
         Build();
     }
@@ -112,7 +116,7 @@ public partial class MatrixWindow : Window
             label.Children.Add(new TextBlock
             {
                 Text = row.Stat,
-                Foreground = row.HasOverride ? Amber : Brushes.White,
+                Foreground = row.HasOverride ? Amber : HeaderStrong,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = TextTrimming.CharacterEllipsis,
@@ -219,9 +223,9 @@ public partial class MatrixWindow : Window
 
     private static Brush TierColor(char? rank) => rank switch
     {
-        'A' => CountFg,
-        'B' => Amber,
-        'C' => TotalFg,
+        'A' => TierGold,
+        'B' => TierSilver,
+        'C' => TierBronze,
         _ => HeaderFg,
     };
 

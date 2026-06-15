@@ -82,6 +82,18 @@ public class StackingAnalyzerTests
     }
 
     [Fact]
+    public void PlaystyleChangesPriorityRank()
+    {
+        var loadout = new Dictionary<EquipSlot, GearItem>
+        {
+            [EquipSlot.Cloak] = Item(EquipSlot.Cloak, new Mod("Melee Power", 10, "Artifact")),
+        };
+        // Melee Power is A-priority for melee, but not prioritized for a caster.
+        Assert.Equal('A', StackingAnalyzer.Analyze(loadout, "melee").Rows[0].Priority);
+        Assert.Null(StackingAnalyzer.Analyze(loadout, "caster").Rows[0].Priority);
+    }
+
+    [Fact]
     public void RowsAreGroupedByCategoryAbilitiesFirst()
     {
         StackingMatrix m = Analyze(

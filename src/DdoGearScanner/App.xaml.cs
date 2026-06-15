@@ -21,7 +21,9 @@ public partial class App : Application
         base.OnStartup(e);
 
         AppSettings settings = AppSettings.Instance;
-        CaptureStore store = CaptureStore.Load();
+        CharacterStore charStore = CharacterStore.Load();
+        CaptureStore store = new();
+        store.SwitchTo(charStore.ActiveId);
 
         // Capture stack: tracker finds the DDO window, coordinator owns the capture session,
         // grabber keeps the latest frame for on-demand single-shot capture.
@@ -57,7 +59,7 @@ public partial class App : Application
         overlay.Show();
         overlay.AttachTracker(_tracker);
 
-        CaptureListWindow main = new(store, settings, reader.IsAvailable);
+        CaptureListWindow main = new(store, charStore, settings, reader.IsAvailable);
         main.ScanRequested += pipeline.RequestCapture;
         main.DetectionToggleRequested += () => pipeline.ToggleSession();
         main.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };

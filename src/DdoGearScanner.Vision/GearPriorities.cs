@@ -60,6 +60,18 @@ public static class GearPriorities
     /// <summary>Best rank ('A'/'B'/'C') for a captured stat across playstyles, or null if unranked.</summary>
     public static char? RankOf(string stat) => Lookup(stat)?.BestRank;
 
+    /// <summary>Rank for a captured stat for a specific playstyle ("melee"/"ranged"/"caster"), or the
+    /// best rank across styles when <paramref name="playstyleKey"/> is null (playstyle not set).
+    /// Returns null when the stat isn't prioritized for that playstyle (e.g. Melee Power on a caster).</summary>
+    public static char? RankOf(string stat, string? playstyleKey)
+    {
+        PriorityEntry? e = Lookup(stat);
+        if (e is null) return null;
+        if (playstyleKey is null) return e.BestRank;
+        string? r = e.Rank(playstyleKey);
+        return string.IsNullOrEmpty(r) ? null : r[0];
+    }
+
     private static List<PriorityEntry> Load()
     {
         var list = new List<PriorityEntry>();

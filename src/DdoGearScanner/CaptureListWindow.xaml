@@ -5,34 +5,12 @@
         Title="DDO Gear Scanner"
         Width="980" Height="720"
         WindowStartupLocation="Manual"
-        Background="#16181D"
-        Foreground="#E8EAED"
-        TextElement.Foreground="#E8EAED">
+        Icon="pack://application:,,,/appicon.ico"
+        Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}">
     <Window.Resources>
-        <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#E8EAED" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
-        </Style>
-        <Style x:Key="Section" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#7FE0A0" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,12,0,4" />
-        </Style>
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="#252932" />
-            <Setter Property="Foreground" Value="#E8EAED" />
-            <Setter Property="BorderBrush" Value="#31363F" />
-            <Setter Property="Padding" Value="10,5" />
-            <Setter Property="Margin" Value="0,0,8,0" />
-        </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#11141A" />
-            <Setter Property="Foreground" Value="#C8CCD2" />
-        </Style>
-        <!-- Loadout slot row -->
+        <!-- Loadout slot row (theme-aware) -->
         <Style TargetType="ListBoxItem">
-            <Setter Property="Foreground" Value="#E8EAED" />
+            <Setter Property="Foreground" Value="{StaticResource Parchment}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="Template">
@@ -43,10 +21,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#2A3550" />
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource SelectionBg}" />
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="#232733" />
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource HoverBg}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -64,8 +42,21 @@
 
         <!-- Header -->
         <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <TextBlock Text="DDO Gear Scanner" FontSize="18" FontWeight="SemiBold" />
-            <TextBlock x:Name="StatusText" Foreground="#9AA0AB" FontSize="12" Margin="0,4,0,0"
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="DDO Gear Scanner" FontSize="19" Style="{StaticResource Title}" VerticalAlignment="Center" />
+                <TextBlock Text="Character:" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}" Margin="22,0,8,0" />
+                <ComboBox x:Name="CharacterSelector" MinWidth="200"
+                          SelectionChanged="CharacterSelector_SelectionChanged" VerticalAlignment="Center">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Display}" Foreground="{StaticResource Parchment}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Content="New" Click="NewCharacter_Click" Margin="8,0,0,0" />
+                <Button Content="Edit" Click="EditCharacter_Click" Margin="0" />
+            </StackPanel>
+            <TextBlock x:Name="StatusText" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0"
                        Text="Press the hotkey to start detection, then hover each equipped gear piece." />
         </StackPanel>
 
@@ -75,10 +66,9 @@
             <Button x:Name="ScanButton" Content="Scan now" Click="ScanNow_Click" />
             <Button x:Name="SetHotkeyButton" Content="Set hotkey" Click="SetHotkey_Click" />
             <Button x:Name="CalibrateButton" Content="Calibrate slots" Click="Calibrate_Click" />
-            <Button x:Name="DetectButton" Content="Detect game window" Click="DetectGameWindow_Click" />
             <Button x:Name="MatrixButton" Content="Stacking matrix" Click="Matrix_Click" />
             <Button x:Name="ClearButton" Content="Clear loadout" Click="ClearList_Click" />
-            <TextBlock x:Name="HotkeyHint" VerticalAlignment="Center" Foreground="#9AA0AB"
+            <TextBlock x:Name="HotkeyHint" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"
                        FontSize="12" Margin="6,0,0,0" Text="" />
         </StackPanel>
 
@@ -100,24 +90,24 @@
                                     <ColumnDefinition Width="78" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="#7C9CFF"
+                                <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="{StaticResource Gold}"
                                            FontSize="11" VerticalAlignment="Center" />
                                 <StackPanel Grid.Column="1">
                                     <TextBlock Text="{Binding Name}" FontSize="14">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="#E8EAED" />
+                                                <Setter Property="Foreground" Value="{StaticResource Parchment}" />
                                                 <Setter Property="FontWeight" Value="SemiBold" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding HasItem}" Value="False">
-                                                        <Setter Property="Foreground" Value="#5B6270" />
+                                                        <Setter Property="Foreground" Value="#6B6149" />
                                                         <Setter Property="FontWeight" Value="Normal" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </TextBlock.Style>
                                     </TextBlock>
-                                    <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="#9AA0AB" />
+                                    <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{StaticResource TextMuted}" />
                                 </StackPanel>
                             </Grid>
                         </DataTemplate>
@@ -131,7 +121,7 @@
             <Border Grid.Column="2" Background="#1E2127" CornerRadius="8" Padding="14">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <Border Background="#11141A" CornerRadius="6" Padding="6" Margin="0,0,0,10">
+                        <Border Background="{StaticResource BgInput}" CornerRadius="6" Padding="6" Margin="0,0,0,10">
                             <Image x:Name="CropImage" MaxHeight="320" Stretch="Uniform"
                                    HorizontalAlignment="Center"
                                    RenderOptions.BitmapScalingMode="HighQuality" />
@@ -139,7 +129,7 @@
 
                         <TextBlock x:Name="LastName" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap"
                                    Text="(select a slot)" />
-                        <TextBlock x:Name="LastMeta" Foreground="#9AA0AB" FontSize="12" Margin="0,3,0,0" />
+                        <TextBlock x:Name="LastMeta" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,3,0,0" />
                         <TextBlock x:Name="LastReadInfo" Foreground="#6B7280" FontSize="11" Margin="0,2,0,0" />
 
                         <TextBlock Text="MODS" Style="{StaticResource Section}" />
@@ -154,9 +144,9 @@
                                         </Grid.ColumnDefinitions>
                                         <!-- Split model (DDOBuilderV2): Stat name | Value | BonusType. -->
                                         <TextBlock Grid.Column="0" Text="{Binding Stat}" TextWrapping="Wrap" />
-                                        <TextBlock Grid.Column="1" Text="{Binding ValueText}" Foreground="#7FE0A0"
+                                        <TextBlock Grid.Column="1" Text="{Binding ValueText}" Foreground="#8FCF8A"
                                                    HorizontalAlignment="Right" />
-                                        <TextBlock Grid.Column="2" Text="{Binding BonusType}" Foreground="#7C9CFF"
+                                        <TextBlock Grid.Column="2" Text="{Binding BonusType}" Foreground="{StaticResource Gold}"
                                                    Margin="10,0,0,0" />
                                     </Grid>
                                 </DataTemplate>
@@ -169,7 +159,7 @@
                                 <DataTemplate>
                                     <TextBlock Margin="0,1">
                                         <Run Text="{Binding Color}" />
-                                        <Run Text="{Binding Filled}" Foreground="#9AA0AB" />
+                                        <Run Text="{Binding Filled}" Foreground="{StaticResource TextMuted}" />
                                         <Run Text="{Binding IsEmpty, StringFormat='empty={0}'}" Foreground="#6B7280" />
                                     </TextBlock>
                                 </DataTemplate>
@@ -185,11 +175,11 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <TextBlock x:Name="LastBinding" Foreground="#9AA0AB" FontSize="12" Margin="0,8,0,0" />
+                        <TextBlock x:Name="LastBinding" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,8,0,0" />
 
-                        <Expander Header="Raw OCR text" Foreground="#9AA0AB" Margin="0,10,0,0">
+                        <Expander Header="Raw OCR text" Foreground="{StaticResource TextMuted}" Margin="0,10,0,0">
                             <TextBox x:Name="RawText" IsReadOnly="True" TextWrapping="Wrap"
-                                     Background="#11141A" Foreground="#C8CCD2" BorderThickness="0"
+                                     Background="{StaticResource BgInput}" Foreground="{StaticResource Parchment}" BorderThickness="0"
                                      FontFamily="Consolas" FontSize="12" Height="160"
                                      VerticalScrollBarVisibility="Auto" />
                         </Expander>

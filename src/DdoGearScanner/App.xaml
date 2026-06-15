@@ -4,5 +4,145 @@
              xmlns:local="clr-namespace:DdoGearScanner"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
+        <!-- ===== DDO-inspired palette: warm dark stone + gold trim + parchment text ===== -->
+        <SolidColorBrush x:Key="BgWindow"    Color="#15110B" />
+        <SolidColorBrush x:Key="BgPanel"     Color="#1E1810" />
+        <SolidColorBrush x:Key="BgPanelAlt"  Color="#272013" />
+        <SolidColorBrush x:Key="BgRaised"    Color="#2E2616" />
+        <SolidColorBrush x:Key="BgInput"     Color="#100C07" />
+        <SolidColorBrush x:Key="BorderDim"   Color="#3A301E" />
+        <SolidColorBrush x:Key="BorderGold"  Color="#8A6E33" />
+        <SolidColorBrush x:Key="Gold"        Color="#C9A24B" />
+        <SolidColorBrush x:Key="GoldBright"  Color="#E6C66A" />
+        <SolidColorBrush x:Key="Parchment"   Color="#C2B89C" />
+        <SolidColorBrush x:Key="ParchStrong" Color="#D6CCAE" />
+        <SolidColorBrush x:Key="TextMuted"   Color="#8C8068" />
+        <SolidColorBrush x:Key="SelectionBg" Color="#3D2F15" />
+        <SolidColorBrush x:Key="HoverBg"     Color="#2C2313" />
+
+        <Style TargetType="Window">
+            <Setter Property="Background" Value="{StaticResource BgWindow}" />
+            <Setter Property="Foreground" Value="{StaticResource Parchment}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+        </Style>
+
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Parchment}" />
+            <Setter Property="FontFamily" Value="Segoe UI" />
+        </Style>
+
+        <!-- Fantasy serif title -->
+        <Style x:Key="Title" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Cambria" />
+            <Setter Property="Foreground" Value="{StaticResource GoldBright}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="Section" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Gold}" />
+            <Setter Property="FontFamily" Value="Cambria" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,12,0,4" />
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BgRaised}" />
+            <Setter Property="Foreground" Value="{StaticResource Parchment}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderGold}" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource HoverBg}" />
+                                <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource GoldBright}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource SelectionBg}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="b" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource BgInput}" />
+            <Setter Property="Foreground" Value="{StaticResource Parchment}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderGold}" />
+            <Setter Property="CaretBrush" Value="{StaticResource Gold}" />
+            <Setter Property="Padding" Value="6,4" />
+        </Style>
+
+        <!-- Dark, readable ComboBox (the default popup is light) -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource Parchment}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="9,5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="{StaticResource SelectionBg}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource Parchment}" />
+            <Setter Property="Background" Value="{StaticResource BgInput}" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="Toggle" Focusable="False" ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="{StaticResource BgInput}" BorderBrush="{StaticResource BorderGold}"
+                                                BorderThickness="1" CornerRadius="4">
+                                            <Path HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,9,0"
+                                                  Data="M0,0 L8,0 L4,5 Z" Fill="{StaticResource Gold}" />
+                                        </Border>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter Margin="9,0,26,0" IsHitTestVisible="False" VerticalAlignment="Center"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" />
+                            <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True"
+                                   Focusable="False" PopupAnimation="Fade">
+                                <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderGold}"
+                                        BorderThickness="1" CornerRadius="4"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ScrollViewer MaxHeight="320">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Application.Resources>
 </Application>

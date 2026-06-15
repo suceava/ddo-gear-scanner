@@ -3,41 +3,41 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Stacking Matrix" Width="1100" Height="700"
         WindowStartupLocation="CenterScreen"
-        Background="#14161B" Foreground="#E8EAED" TextElement.Foreground="#E8EAED"
+        Icon="pack://application:,,,/appicon.ico"
+        Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}"
         TextOptions.TextFormattingMode="Display">
     <Window.Resources>
-        <Style TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#E8EAED" />
-            <Setter Property="FontFamily" Value="Segoe UI" />
+        <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
             <Setter Property="FontSize" Value="12.5" />
         </Style>
     </Window.Resources>
     <DockPanel Margin="0">
         <!-- Header band -->
-        <Border DockPanel.Dock="Top" Background="#1B1E26" Padding="20,14">
+        <Border DockPanel.Dock="Top" Background="{StaticResource BgPanel}" Padding="20,14"
+                BorderBrush="{StaticResource BorderGold}" BorderThickness="0,0,0,1">
             <StackPanel>
-                <TextBlock Text="Stacking Matrix" FontSize="19" FontWeight="SemiBold" />
-                <TextBlock x:Name="Summary" Foreground="#9AA0AB" Margin="0,3,0,0" FontSize="12.5" />
+                <TextBlock Text="Stacking Matrix" FontSize="20" Style="{StaticResource Title}" />
+                <TextBlock x:Name="Summary" Foreground="{StaticResource TextMuted}" Margin="0,3,0,0" FontSize="12.5" />
             </StackPanel>
         </Border>
 
         <!-- Legend + controls -->
-        <Border DockPanel.Dock="Top" Background="#16181D" Padding="20,9"
-                BorderBrush="#262A33" BorderThickness="0,0,0,1">
+        <Border DockPanel.Dock="Top" Background="{StaticResource BgWindow}" Padding="20,9"
+                BorderBrush="{StaticResource BorderDim}" BorderThickness="0,0,0,1">
             <DockPanel>
                 <CheckBox x:Name="ConflictsOnly" DockPanel.Dock="Right" Content="Conflicts only"
-                          Foreground="#C8CCD2" VerticalAlignment="Center" Checked="ConflictsOnly_Changed"
+                          Foreground="{StaticResource Parchment}" VerticalAlignment="Center" Checked="ConflictsOnly_Changed"
                           Unchecked="ConflictsOnly_Changed" />
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Background="#163326" CornerRadius="9" Padding="9,2" Margin="0,0,8,0">
-                        <TextBlock Text="+N counts" Foreground="#7FE0A0" />
+                    <Border Background="#182C1A" CornerRadius="9" Padding="9,2" Margin="0,0,8,0">
+                        <TextBlock Text="+N counts" Foreground="#8FCF8A" />
                     </Border>
-                    <Border Background="#3A2422" CornerRadius="9" Padding="9,2" Margin="0,0,8,0">
-                        <TextBlock Text="+N overridden" Foreground="#E0726A"
+                    <Border Background="#35201C" CornerRadius="9" Padding="9,2" Margin="0,0,8,0">
+                        <TextBlock Text="+N overridden" Foreground="#DA6E5E"
                                    TextDecorations="Strikethrough" />
                     </Border>
-                    <TextBlock Text="A/B/C = gear priority · &quot;= N&quot; shows a sum only where a type actually stacks"
-                               Foreground="#9AA0AB" VerticalAlignment="Center" />
+                    <TextBlock Text="A/B/C = gear priority (gold/silver/bronze) · &quot;= N&quot; shows a sum only where a type actually stacks"
+                               Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" />
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -49,7 +49,7 @@
             </Grid.RowDefinitions>
 
             <!-- Frozen header (scrolls horizontally in sync with the body, but never vertically) -->
-            <ScrollViewer x:Name="HeaderScroll" Grid.Row="0" Padding="20,0" Background="#22262F"
+            <ScrollViewer x:Name="HeaderScroll" Grid.Row="0" Padding="20,0" Background="{StaticResource BgPanelAlt}"
                           HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
                 <Grid x:Name="HeaderGrid" />
             </ScrollViewer>

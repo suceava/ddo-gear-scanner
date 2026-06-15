@@ -38,7 +38,8 @@ public sealed record StackingMatrix(
 /// </summary>
 public static class StackingAnalyzer
 {
-    public static StackingMatrix Analyze(IReadOnlyDictionary<EquipSlot, GearItem> loadout)
+    public static StackingMatrix Analyze(
+        IReadOnlyDictionary<EquipSlot, GearItem> loadout, string? playstyleKey = null)
     {
         var all = new List<(EquipSlot Slot, Mod Mod)>();
         foreach ((EquipSlot slot, GearItem item) in loadout)
@@ -88,8 +89,8 @@ public static class StackingAnalyzer
             bool hasOverride = cells.Any(c => c.Overridden);
             bool isPercent = cells.Count(c => c.IsPercent) * 2 >= cells.Count;
             string stat = grp.Key.Stat;
-            rows.Add(new MatrixRow(stat, grp.Key.Type, StatCatalog.Categorize(stat), GearPriorities.RankOf(stat),
-                isPercent, effective, hasOverride, cells));
+            rows.Add(new MatrixRow(stat, grp.Key.Type, StatCatalog.Categorize(stat),
+                GearPriorities.RankOf(stat, playstyleKey), isPercent, effective, hasOverride, cells));
         }
 
         // Group by PRIORITY tier (Strimtom A>B>C, unranked last); within a tier cluster by category

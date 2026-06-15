@@ -18,8 +18,10 @@ namespace DdoGearScanner;
 public partial class CaptureListWindow : Window
 {
     private readonly CaptureStore _store;
+    private readonly CharacterStore _charStore;
     private readonly AppSettings _settings;
     private readonly ObservableCollection<SlotRow> _rows;
+    private bool _switchingCharacter;
     // Captured tooltip images for THIS session, keyed by slot (slots loaded from disk have none).
     private readonly Dictionary<EquipSlot, BitmapImage> _crops = new();
 
@@ -37,19 +39,21 @@ public partial class CaptureListWindow : Window
 
     private bool _bindingHotkey;
 
-    public CaptureListWindow(CaptureStore store, AppSettings settings, bool ocrAvailable)
+    public CaptureListWindow(CaptureStore store, CharacterStore charStore, AppSettings settings, bool ocrAvailable)
     {
         InitializeComponent();
+        WindowChrome.UseDarkTitleBar(this);
         _store = store;
+        _charStore = charStore;
         _settings = settings;
 
         Left = settings.WindowLeft;
         Top = settings.WindowTop;
 
         _rows = new ObservableCollection<SlotRow>(SlotInfo.DisplayOrder.Select(s => new SlotRow(s)));
-        foreach (SlotRow row in _rows)
-            if (store.Loadout.TryGetValue(row.Slot, out GearItem? it)) row.Item = it;
         SlotSheet.ItemsSource = _rows;
+        RefreshLoadout();
+        PopulateCharacters();
 
         if (!ocrAvailable)
             StatusText.Text = "⚠ Windows OCR engine unavailable — install an OCR language pack (Settings → Language).";
@@ -198,36 +202,71 @@ public partial class CaptureListWindow : Window
 
     private void Matrix_Click(object sender, RoutedEventArgs e)
     {
-        var matrix = Vision.StackingAnalyzer.Analyze(_store.Loadout);
+        var matrix = Vision.StackingAnalyzer.Analyze(_store.Loadout, _charStore.Active.PlaystyleKey);
         new MatrixWindow(matrix) { Owner = this }.Show();
     }
 
-    private void DetectGameWindow_Click(object sender, RoutedEventArgs e)
+    // ---- characters ----
+
+    private void PopulateCharacters()
     {
-        List<WindowInfo> windows = GameWindowTracker.EnumerateCandidateWindows();
-        StringBuilder sb = new();
-        sb.AppendLine("Visible top-level windows (process / class / title):");
-        sb.AppendLine();
-
-        bool foundDdo = false;
-        foreach (WindowInfo w in windows
-                     .OrderByDescending(w => LooksLikeDdo(w))
-                     .ThenBy(w => w.ProcessName))
-        {
-            bool ddo = LooksLikeDdo(w);
-            if (ddo) foundDdo = true;
-            sb.AppendLine($"{(ddo ? "➤ " : "  ")}{w.ProcessName,-18}  [{w.ClassName}]  {w.Title}");
-        }
-
-        StatusText.Text = foundDdo
-            ? "DDO window detected (marked ➤ below). Update GameWindowTracker constants if needed."
-            : "No obvious DDO window found. Is the client running in windowed/borderless mode?";
-        RawText.Text = sb.ToString();
+        _switchingCharacter = true;
+        CharacterSelector.ItemsSource = _charStore.Profiles.ToList();
+        CharacterSelector.SelectedItem = _charStore.Profiles.FirstOrDefault(p => p.Id == _charStore.ActiveId);
+        _switchingCharacter = false;
     }
 
-    private static bool LooksLikeDdo(WindowInfo w)
-        => w.ProcessName.Contains("dndclient", StringComparison.OrdinalIgnoreCase)
-           || w.Title.Contains("Dungeons & Dragons Online", StringComparison.OrdinalIgnoreCase);
+    private void CharacterSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_switchingCharacter || CharacterSelector.SelectedItem is not CharacterProfile p) return;
+        if (p.Id == _charStore.ActiveId) return;
+        SwitchToCharacter(p.Id);
+    }
+
+    private void SwitchToCharacter(string id)
+    {
+        _charStore.SetActive(id);
+        _store.SwitchTo(id);
+        RefreshLoadout();
+        _crops.Clear();
+        ShowItem(null, null);
+        StatusText.Text = $"Switched to {_charStore.Active.Name}.";
+    }
+
+    private void RefreshLoadout()
+    {
+        foreach (SlotRow row in _rows) row.Item = _store.Get(row.Slot);
+    }
+
+    private void NewCharacter_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new CharacterEditWindow(null, canDelete: false) { Owner = this };
+        if (dlg.ShowDialog() != true || dlg.Result is null) return;
+        CharacterProfile added = _charStore.Add(dlg.Result.Name, dlg.Result.Playstyle, dlg.Result.Classes, dlg.Result.Level);
+        _store.SwitchTo(added.Id);
+        RefreshLoadout();
+        _crops.Clear();
+        ShowItem(null, null);
+        PopulateCharacters();
+        StatusText.Text = $"Created {added.Name}.";
+    }
+
+    private void EditCharacter_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new CharacterEditWindow(_charStore.Active, canDelete: _charStore.Profiles.Count > 1) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        if (dlg.DeleteRequested)
+        {
+            string newActive = _charStore.Remove(_charStore.ActiveId);
+            SwitchToCharacter(newActive);
+        }
+        else if (dlg.Result is not null)
+        {
+            _charStore.Update(dlg.Result);
+        }
+        PopulateCharacters();
+    }
 
     private static string DescribeHotkey(uint modifiers, uint vk)
     {

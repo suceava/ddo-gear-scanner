@@ -48,8 +48,8 @@ public sealed class CapturePipeline
     private InventoryLocator? _invLocator;
     private SlotMap? _slotMap;
     public void SetInventory(InventoryLocator? locator, SlotMap? map) { _invLocator = locator; _slotMap = map; }
-    private Point _invAnchor;   // rag-doll position, cached from a recent clean frame
-    private bool _invOpen;      // was the rag-doll found in the last clean-frame check
+    private Point _invAnchor;     // rag-doll position, refreshed on clean frames; never goes stale-false
+    private bool _invAnchorKnown; // have we located the rag-doll at least once this session (latches true)
     private int _invTick;
 
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ddo-gear-scanner.log");
@@ -88,11 +88,19 @@ public sealed class CapturePipeline
 
         // Cache the rag-doll anchor from CLEAN (no-tooltip) frames — at capture time a tooltip
         // covers it. Throttled so the template match stays cheap.
-        if (_invLocator is not null && _change.LastFrameClean && (++_invTick % 20 == 0))
+        // Refresh the rag-doll anchor from CLEAN frames. We only ever UPDATE it on a hit (latching
+        // _invAnchorKnown true) — a single missed locate must NOT disable gating, or bag-item
+        // tooltips leak through to the parser's slot guess. If the inventory moves, the anchor
+        // self-corrects on the next clean frame.
+        // Locate eagerly on EVERY clean frame until we have the anchor (so the no-capture window at
+        // session start is tiny), then throttle to keep the frame thread cheap.
+        if (_invLocator is not null && _change.LastFrameClean && (!_invAnchorKnown || ++_invTick % 20 == 0))
         {
-            Point? a = _invLocator.Locate(frame);
-            _invOpen = a.HasValue;
-            if (a is Point pa) _invAnchor = pa;
+            if (_invLocator.Locate(frame) is Point pa)
+            {
+                _invAnchor = pa;
+                if (!_invAnchorKnown) { _invAnchorKnown = true; Log($"inv-check: ragdoll anchor @({pa.X},{pa.Y})"); }
+            }
         }
 
         if (region is null) return;
@@ -104,11 +112,18 @@ public sealed class CapturePipeline
         // Inventory slot: if calibrated and the paper-doll is open (from the cached clean-frame
         // locate), find which equipment slot the cursor is over. On a slot → tag it. Inventory open
         // but cursor NOT on a slot (a bag item) → skip the capture (only equipped gear).
+        // Once we've found the paper-doll, captures MUST land on a calibrated slot — otherwise it's a
+        // bag item (or off the doll) and we skip it. We never fall back to the parser's slot guess
+        // while calibrated, which is what was tagging bag items onto equipped slots.
         EquipSlot? slot = null;
-        if (_slotMap is { IsCalibrated: true } && _invOpen)
+        if (_slotMap is { IsCalibrated: true })
         {
+            // Calibrated => the slot MUST come from inventory detection, never the parser's guess.
+            // If we haven't located the paper-doll yet, skip rather than risk tagging a bag item.
+            if (!_invAnchorKnown) { Log("slot-detect: no inventory anchor yet — skipping"); return; }
             slot = _slotMap.SlotAt(_invAnchor.X, _invAnchor.Y, cursor.X, cursor.Y);
-            if (slot is null) { Log("gated: inventory open, cursor not on an equipment slot"); return; }
+            Log($"slot-detect: anchor=({_invAnchor.X},{_invAnchor.Y}) cursor=({cursor.X},{cursor.Y}) -> {slot?.ToString() ?? "null (gated, skipping)"}");
+            if (slot is null) return;
         }
 
         OpenCvMat crop = new OpenCvMat(frame, b).Clone();

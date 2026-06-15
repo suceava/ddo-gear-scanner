@@ -6,35 +6,38 @@ using DdoGearScanner.Model;
 namespace DdoGearScanner;
 
 /// <summary>
-/// The character's equipped loadout: one item per equipment slot. Re-capturing a slot overwrites
-/// it (it's not a new entry). Persists to %APPDATA%\DdoGearScanner\loadout.json.
+/// The active character's equipped loadout: one item per equipment slot. Re-capturing a slot
+/// overwrites it. Gear is stored PER CHARACTER in %APPDATA%\DdoGearScanner\loadout-&lt;id&gt;.json;
+/// <see cref="SwitchTo"/> swaps the active character (called when the user changes the selection).
 /// </summary>
 public sealed class CaptureStore
 {
     private static readonly string Dir = AppSettings.AppDataDir;
-    private static readonly string StorePath = Path.Combine(Dir, "loadout.json");
-
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         WriteIndented = true,
         Converters = { new JsonStringEnumConverter() },
     };
 
+    public string CharacterId { get; private set; } = "";
     public Dictionary<EquipSlot, GearItem> Loadout { get; private set; } = new();
 
-    public static CaptureStore Load()
+    private string StorePath => Path.Combine(Dir, $"loadout-{CharacterId}.json");
+
+    /// <summary>Load the given character's loadout, replacing the current one.</summary>
+    public void SwitchTo(string characterId)
     {
-        CaptureStore store = new();
+        CharacterId = characterId;
+        Loadout = new();
         try
         {
             if (File.Exists(StorePath))
             {
                 var loaded = JsonSerializer.Deserialize<Dictionary<EquipSlot, GearItem>>(File.ReadAllText(StorePath), JsonOpts);
-                if (loaded is not null) store.Loadout = loaded;
+                if (loaded is not null) Loadout = loaded;
             }
         }
         catch { /* start empty rather than crash on a corrupt file */ }
-        return store;
     }
 
     /// <summary>Set (overwrite) the item in a slot.</summary>
@@ -54,6 +57,7 @@ public sealed class CaptureStore
 
     public void Save()
     {
+        if (string.IsNullOrEmpty(CharacterId)) return;
         try
         {
             Directory.CreateDirectory(Dir);

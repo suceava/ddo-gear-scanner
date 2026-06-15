@@ -9,8 +9,8 @@ public static class SlotInfo
     public static readonly EquipSlot[] DisplayOrder =
     {
         EquipSlot.Helmet, EquipSlot.Goggles, EquipSlot.Necklace, EquipSlot.Trinket, EquipSlot.Cloak,
-        EquipSlot.Armor, EquipSlot.Bracers, EquipSlot.Gloves, EquipSlot.Belt, EquipSlot.Ring1,
-        EquipSlot.Ring2, EquipSlot.Boots, EquipSlot.MainHand, EquipSlot.OffHand, EquipSlot.Quiver,
+        EquipSlot.Armor, EquipSlot.Bracers, EquipSlot.Gloves, EquipSlot.Belt, EquipSlot.Boots,
+        EquipSlot.Ring1, EquipSlot.Ring2, EquipSlot.MainHand, EquipSlot.OffHand, EquipSlot.Quiver,
     };
 
     public static string Label(EquipSlot s) => s switch
