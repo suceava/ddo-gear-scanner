@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Data\gear-priorities.json" />
+    <!-- Rag-doll anchor template for inventory slot detection, embedded so the single-file exe is self-contained. -->
+    <EmbeddedResource Include="..\..\assets\inventory\ragdoll.png" LogicalName="ragdoll.png" />
   </ItemGroup>
 
 </Project>

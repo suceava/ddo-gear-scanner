@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DdoGearScanner;
 
@@ -21,6 +22,14 @@ public sealed class AppSettings : INotifyPropertyChanged
         "DdoGearScanner");
     private static readonly string SettingsPath = Path.Combine(Dir, "settings.json");
 
+    // AllowNamedFloatingPointLiterals so the NaN "unset" sentinels for window bounds serialize as
+    // "NaN" instead of throwing (which silently broke ALL settings persistence).
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        WriteIndented = true,
+        NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
+    };
+
     public static AppSettings Instance { get; } = Load();
 
     private bool _suppressSave;
@@ -38,11 +47,29 @@ public sealed class AppSettings : INotifyPropertyChanged
     private bool _debugDumpCrops = true;
     public bool DebugDumpCrops { get => _debugDumpCrops; set => Set(ref _debugDumpCrops, value); }
 
+    // Main window bounds (NaN width/height => use the XAML default on first run).
     private double _windowLeft = 80;
     public double WindowLeft { get => _windowLeft; set => Set(ref _windowLeft, value); }
-
     private double _windowTop = 80;
     public double WindowTop { get => _windowTop; set => Set(ref _windowTop, value); }
+    private double _windowWidth = double.NaN;
+    public double WindowWidth { get => _windowWidth; set => Set(ref _windowWidth, value); }
+    private double _windowHeight = double.NaN;
+    public double WindowHeight { get => _windowHeight; set => Set(ref _windowHeight, value); }
+    private bool _windowMaximized;
+    public bool WindowMaximized { get => _windowMaximized; set => Set(ref _windowMaximized, value); }
+
+    // Stacking-matrix window bounds (NaN => center on first open).
+    private double _matrixLeft = double.NaN;
+    public double MatrixLeft { get => _matrixLeft; set => Set(ref _matrixLeft, value); }
+    private double _matrixTop = double.NaN;
+    public double MatrixTop { get => _matrixTop; set => Set(ref _matrixTop, value); }
+    private double _matrixWidth = double.NaN;
+    public double MatrixWidth { get => _matrixWidth; set => Set(ref _matrixWidth, value); }
+    private double _matrixHeight = double.NaN;
+    public double MatrixHeight { get => _matrixHeight; set => Set(ref _matrixHeight, value); }
+    private bool _matrixMaximized;
+    public bool MatrixMaximized { get => _matrixMaximized; set => Set(ref _matrixMaximized, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -61,7 +88,7 @@ public sealed class AppSettings : INotifyPropertyChanged
         {
             if (File.Exists(SettingsPath))
             {
-                AppSettings? loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath));
+                AppSettings? loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath), JsonOpts);
                 if (loaded is not null)
                 {
                     s.HotkeyModifiers = loaded.HotkeyModifiers;
@@ -69,6 +96,14 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.DebugDumpCrops = loaded.DebugDumpCrops;
                     s.WindowLeft = loaded.WindowLeft;
                     s.WindowTop = loaded.WindowTop;
+                    s.WindowWidth = loaded.WindowWidth;
+                    s.WindowHeight = loaded.WindowHeight;
+                    s.WindowMaximized = loaded.WindowMaximized;
+                    s.MatrixLeft = loaded.MatrixLeft;
+                    s.MatrixTop = loaded.MatrixTop;
+                    s.MatrixWidth = loaded.MatrixWidth;
+                    s.MatrixHeight = loaded.MatrixHeight;
+                    s.MatrixMaximized = loaded.MatrixMaximized;
                 }
             }
         }
@@ -82,7 +117,7 @@ public sealed class AppSettings : INotifyPropertyChanged
         try
         {
             Directory.CreateDirectory(Dir);
-            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, JsonOpts));
         }
         catch { /* losing persistence beats crashing */ }
     }

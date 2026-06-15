@@ -25,9 +25,6 @@ public partial class CaptureListWindow : Window
     // Captured tooltip images for THIS session, keyed by slot (slots loaded from disk have none).
     private readonly Dictionary<EquipSlot, BitmapImage> _crops = new();
 
-    /// <summary>Raised when the "Scan now" button is clicked (App wires this to the pipeline).</summary>
-    public event Action? ScanRequested;
-
     /// <summary>Raised when the user presses a new hotkey combo. Returns true if it registered.</summary>
     public event Func<uint, uint, bool>? RebindRequested;
 
@@ -47,8 +44,8 @@ public partial class CaptureListWindow : Window
         _charStore = charStore;
         _settings = settings;
 
-        Left = settings.WindowLeft;
-        Top = settings.WindowTop;
+        WindowChrome.ApplyBounds(this, settings.WindowLeft, settings.WindowTop,
+            settings.WindowWidth, settings.WindowHeight, settings.WindowMaximized);
 
         _rows = new ObservableCollection<SlotRow>(SlotInfo.DisplayOrder.Select(s => new SlotRow(s)));
         SlotSheet.ItemsSource = _rows;
@@ -58,32 +55,46 @@ public partial class CaptureListWindow : Window
         if (!ocrAvailable)
             StatusText.Text = "⚠ Windows OCR engine unavailable — install an OCR language pack (Settings → Language).";
 
-        LocationChanged += (_, _) => { _settings.WindowLeft = Left; _settings.WindowTop = Top; };
+        WindowChrome.PersistBounds(this, (l, t, w, h, m) =>
+        {
+            _settings.WindowLeft = l; _settings.WindowTop = t;
+            _settings.WindowWidth = w; _settings.WindowHeight = h; _settings.WindowMaximized = m;
+        });
         PreviewKeyDown += OnPreviewKeyDown;
     }
 
     public void SetHotkeyStatus(bool registered, uint modifiers, uint vk)
     {
         string combo = DescribeHotkey(modifiers, vk);
-        HotkeyHint.Text = registered
-            ? $"Hotkey: {combo}"
-            : $"⚠ Hotkey {combo} is taken by another app — use \"Scan now\".";
+        HotkeyMenuItem.Content = $"Set Detection Hotkey ({combo})";
+        if (!registered)
+            StatusText.Text = $"⚠ Hotkey {combo} is taken by another app — pick another in ☰ Menu → Set Detection Hotkey.";
     }
 
     public void NoteHotkeyHealed(uint modifiers, uint vk)
-        => StatusText.Text = $"Saved hotkey was taken by another app — reverted to {DescribeHotkey(modifiers, vk)}. Rebind via \"Set hotkey\".";
+        => StatusText.Text = $"Saved hotkey was taken by another app — reverted to {DescribeHotkey(modifiers, vk)}. Rebind via ☰ Menu → Set Detection Hotkey.";
 
     public void OnSessionChanged(bool active) => Dispatcher.Invoke(() =>
     {
-        DetectionButton.Content = active ? "Detection: ON" : "Detection: OFF";
+        DetectionButton.Content = active ? "Toggle Detection (On)" : "Toggle Detection (Off)";
         StatusText.Text = active
             ? "● Detection ON — hover each gear piece in DDO; each tooltip is captured automatically."
-            : "Detection paused. Click \"Detection: OFF\" to resume.";
+            : "Detection paused. Press the hotkey (or ☰ Menu → Toggle Detection) to resume.";
     });
 
-    private void DetectionToggle_Click(object sender, RoutedEventArgs e) => DetectionToggleRequested?.Invoke();
+    private void Menu_Click(object sender, RoutedEventArgs e) => MenuPopup.IsOpen = true;
 
-    private void Calibrate_Click(object sender, RoutedEventArgs e) => CalibrateRequested?.Invoke();
+    private void DetectionToggle_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+        DetectionToggleRequested?.Invoke();
+    }
+
+    private void Calibrate_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+        CalibrateRequested?.Invoke();
+    }
 
     public void SetStatusText(string text) => Dispatcher.Invoke(() => StatusText.Text = text);
 
@@ -142,12 +153,16 @@ public partial class CaptureListWindow : Window
         CropImage.Source = crop;
     }
 
-    private void ScanNow_Click(object sender, RoutedEventArgs e) => ScanRequested?.Invoke();
 
     private void SetHotkey_Click(object sender, RoutedEventArgs e)
     {
+        MenuPopup.IsOpen = false;
         _bindingHotkey = true;
-        StatusText.Text = "Press your desired hotkey now (e.g. ScrollLock, or Ctrl+Shift+…). Esc to cancel.";
+        BindingPrompt.Visibility = Visibility.Visible;
+        // The popup orphans keyboard focus when it closes; pull it back to the window so the next
+        // key press reaches OnPreviewKeyDown. Deferred so it runs after the popup actually closes.
+        Dispatcher.BeginInvoke(new Action(() => { Activate(); Keyboard.Focus(this); }),
+            System.Windows.Threading.DispatcherPriority.Input);
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
@@ -159,6 +174,7 @@ public partial class CaptureListWindow : Window
         if (key == Key.Escape)
         {
             _bindingHotkey = false;
+            BindingPrompt.Visibility = Visibility.Collapsed;
             e.Handled = true;
             StatusText.Text = "Hotkey unchanged.";
             return;
@@ -178,6 +194,7 @@ public partial class CaptureListWindow : Window
         uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
 
         _bindingHotkey = false;
+        BindingPrompt.Visibility = Visibility.Collapsed;
         e.Handled = true;
 
         bool ok = RebindRequested?.Invoke(mod, vk) ?? false;
@@ -185,12 +202,13 @@ public partial class CaptureListWindow : Window
         if (ok)
             StatusText.Text = $"Hotkey set to {DescribeHotkey(mod, vk)}.";
         else
-            StatusText.Text = $"{DescribeHotkey(mod, vk)} is taken by another app — press a different combo via \"Set hotkey\".";
+            StatusText.Text = $"{DescribeHotkey(mod, vk)} is taken by another app — pick a different combo via ☰ Menu → Set Detection Hotkey.";
     }
 
     private void ClearList_Click(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show("Clear the whole loadout?", "DDO Gear Scanner",
+        MenuPopup.IsOpen = false;
+        if (MessageBox.Show($"Clear {_charStore.Active.Name}'s whole loadout?", "DDO Gear Scanner",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
         _store.Clear();
@@ -200,10 +218,20 @@ public partial class CaptureListWindow : Window
         StatusText.Text = "Loadout cleared.";
     }
 
+    private MatrixWindow? _matrixWindow;
+
     private void Matrix_Click(object sender, RoutedEventArgs e)
     {
         var matrix = Vision.StackingAnalyzer.Analyze(_store.Loadout, _charStore.Active.PlaystyleKey);
-        new MatrixWindow(matrix) { Owner = this }.Show();
+        if (_matrixWindow is not null)
+        {
+            _matrixWindow.Update(matrix);              // reuse the open one, refreshed
+            _matrixWindow.Activate();
+            return;
+        }
+        _matrixWindow = new MatrixWindow(matrix) { Owner = this };
+        _matrixWindow.Closed += (_, _) => _matrixWindow = null;
+        _matrixWindow.Show();
     }
 
     // ---- characters ----

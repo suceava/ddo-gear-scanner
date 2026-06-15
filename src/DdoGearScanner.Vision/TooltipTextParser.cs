@@ -206,7 +206,7 @@ public static partial class TooltipTextParser
         bool isPercent = false;
         if (vm.Success)
         {
-            string num = vm.Groups[1].Value.Replace(",", "").Replace("O", "0").Replace("o", "0");
+            string num = vm.Groups[1].Value.Replace(",", "").Replace(" ", "").Replace("O", "0").Replace("o", "0");
             double.TryParse(num, System.Globalization.NumberStyles.Float,
                 System.Globalization.CultureInfo.InvariantCulture, out value);
             isPercent = vm.Value.Contains('%');   // the matched token kept its trailing % if any
@@ -289,11 +289,11 @@ public static partial class TooltipTextParser
 
         if (lines.Count == 0) return GearItem.Empty(raw);
 
-        // The equipped-comparison tooltip leads with a "CURRENTLY EQUIPPED" header — the real name
-        // is below it. Skip such a header (OCR can mangle it, so match loosely). The name itself may
-        // wrap across lines, so gather lines until the first real field/content line.
-        int nameIdx = IsEquippedHeader(lines[0]) && lines.Count > 1 ? 1 : 0;
-        int classifyFrom = nameIdx;
+        // The equipped-comparison tooltip leads with a "CURRENTLY EQUIPPED" header — the real name is
+        // below it. OCR mangles the header ("CURRENTLY-EC)UIPPED", "CURRENTEY@UIPPED") and sometimes
+        // glues it onto the name line, so strip header tokens from each top-block line; a line that's
+        // ALL header becomes empty and is skipped (not counted as a name). The name may wrap.
+        int classifyFrom = 0;
         string? itemTypeText = null;
         List<string> nameParts = new();
         while (classifyFrom < lines.Count && nameParts.Count < 3)
@@ -305,10 +305,11 @@ public static partial class TooltipTextParser
             if (nameParts.Count >= 1 && IsTypeLine(l)) { itemTypeText = l; classifyFrom++; break; }
             // A standalone quality word ("Normal", "Rare", …) under the name — skip it.
             if (nameParts.Count >= 1 && IsQualityLine(l)) { classifyFrom++; break; }
-            nameParts.Add(l);
+            string cleaned = StripEquippedHeader(l);
+            if (cleaned.Length > 0) nameParts.Add(cleaned);
             classifyFrom++;
         }
-        if (nameParts.Count == 0) { nameParts.Add(lines[nameIdx]); classifyFrom = nameIdx + 1; }
+        if (nameParts.Count == 0) { nameParts.Add(lines[0]); classifyFrom = 1; }
         string name = string.Join(" ", nameParts);
         int? minLevel = null;
         EquipSlot slot = EquipSlot.Unknown;
@@ -323,6 +324,11 @@ public static partial class TooltipTextParser
             string line = lines[i];
 
             if (minLevel is null && TryParseMinLevel(line, out int ml)) { minLevel = ml; continue; }
+
+            // Footer / flavor text (Base Value, Durability, Hardness, weight, the item description) must
+            // never become a mod. This matters most for the line-based fallback (no ▶ bullets), which
+            // otherwise scrapes the whole tooltip — e.g. "Base Value 2020", "0.1 lbs", flavor prose.
+            if (IsNonModLine(line)) continue;
 
             if (TryParseAugment(line, out AugmentSlot? aug) && aug is not null) { augments.Add(aug); continue; }
 
@@ -444,7 +450,10 @@ public static partial class TooltipTextParser
         // DDO set lines usually contain the word "Set" and often "Bonus". Avoid swallowing
         // ordinary affixes: require the word "Set" as a standalone token.
         if (!Regex.IsMatch(line, @"\bSet\b")) return false;
-        // Skip if it's clearly a numeric mod that merely mentions 'set'.
+        // The "Set Bonuses:" section HEADER is not itself a set.
+        string t = line.Trim().TrimEnd(':').Trim();
+        if (t.Equals("Set Bonuses", StringComparison.OrdinalIgnoreCase)
+            || t.Equals("Set Bonus", StringComparison.OrdinalIgnoreCase)) return false;
         set = new SetBonus(line);
         return true;
     }
@@ -485,10 +494,30 @@ public static partial class TooltipTextParser
 
     // ---- helpers ----
 
-    private static bool IsEquippedHeader(string line)
+    /// <summary>Remove (OCR-mangled) "CURRENTLY EQUIPPED" header tokens from a name line. A line that
+    /// is purely the header returns empty; a combined "…EQUIPPED Vulkoorim Pendant" keeps the name.</summary>
+    private static string StripEquippedHeader(string line)
+        => string.Join(' ', line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(t => !IsHeaderToken(t))).Trim();
+
+    private static bool IsHeaderToken(string token)
     {
-        string norm = new string(line.Where(char.IsLetter).ToArray()).ToLowerInvariant();
-        return norm.Contains("current") || norm.Contains("equipp");
+        string n = new string(token.Where(char.IsLetter).ToArray()).ToLowerInvariant();
+        if (n.Length < 4) return false;
+        return n.Contains("current") || n.Contains("rrent") || n.Contains("rentl")
+            || n.Contains("uipp") || n.Contains("quipp") || n.Contains("cuipp");
+    }
+
+    /// <summary>Bottom-of-tooltip footer (value/weight/durability/hardness) or item flavor prose —
+    /// never a mod. Used to keep the line-based fallback from scraping the whole tooltip.</summary>
+    private static bool IsNonModLine(string line)
+    {
+        string l = line.ToLowerInvariant();
+        if (l.Contains("base value") || l.Contains("durabi") || l.Contains("hardness")
+            || l.Contains("lbs") || l.Contains("minimum level") || l.Contains("absolute minimum")
+            || l.Contains("pieces equipped"))
+            return true;
+        // A long sentence with no "+N" affix value is flavor, not an affix.
+        return line.Length > 48 && !line.Contains('+') && CountWords(line) >= 8;
     }
 
     // The name ends (and content begins) at the first of these. Deliberately reliable markers, so
@@ -619,9 +648,9 @@ public static partial class TooltipTextParser
     [GeneratedRegex(@"([+\-]?\d[\d,]*(?:\.\d+)?)%?")]
     private static partial Regex ValueRe();
 
-    // A SIGNED value token ("+18", "-20", "+6"); used for per-block extraction where an unsigned
-    // number ("provides a 8") must NOT be mistaken for the affix value.
-    [GeneratedRegex(@"([+\-]\d[\d,]*(?:\.\d+)?)%?")]
+    // A SIGNED value token ("+18", "-20", "+6", and OCR's "- 20"); used for per-block extraction
+    // where an unsigned number ("provides a 8") must NOT be mistaken for the affix value.
+    [GeneratedRegex(@"([+\-]\s?\d[\d,]*(?:\.\d+)?)%?")]
     private static partial Regex SignedValueRe();
 
     // "<value> <Type[ Type2]> bonus" inside a description — the stated bonus type.

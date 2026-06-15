@@ -28,4 +28,45 @@ internal static class WindowChrome
         if (handle != IntPtr.Zero) Apply(handle);
         else window.SourceInitialized += (_, _) => Apply(new WindowInteropHelper(window).Handle);
     }
+
+    /// <summary>Restore a window's saved size + position (NaN values keep the XAML default), skipping
+    /// an off-screen position (e.g. a monitor that's since been unplugged), then maximized state.</summary>
+    public static void ApplyBounds(Window w, double left, double top, double width, double height, bool maximized)
+    {
+        if (width > 100) w.Width = width;          // NaN comparisons are false => keep default
+        if (height > 100) w.Height = height;
+        if (!double.IsNaN(left) && !double.IsNaN(top) && OnScreen(left, top, w.Width, w.Height))
+        {
+            w.WindowStartupLocation = WindowStartupLocation.Manual;
+            w.Left = left;
+            w.Top = top;
+        }
+        if (maximized) w.WindowState = WindowState.Maximized;
+    }
+
+    /// <summary>Persist a window's bounds continuously (on move / resize / maximize) while it's alive.
+    /// Done live rather than at Close because RestoreBounds is empty once a window starts closing —
+    /// which silently lost the bounds of secondary windows during app shutdown. Uses RestoreBounds so
+    /// a maximized window still saves its underlying normal size. <paramref name="save"/> writes
+    /// (left, top, width, height, maximized).</summary>
+    public static void PersistBounds(Window w, Action<double, double, double, double, bool> save)
+    {
+        void Save()
+        {
+            System.Windows.Rect b = w.RestoreBounds;
+            if (!b.IsEmpty) save(b.Left, b.Top, b.Width, b.Height, w.WindowState == WindowState.Maximized);
+        }
+        w.LocationChanged += (_, _) => Save();
+        w.SizeChanged += (_, _) => Save();
+        w.StateChanged += (_, _) => Save();
+    }
+
+    private static bool OnScreen(double left, double top, double width, double height)
+    {
+        double vl = SystemParameters.VirtualScreenLeft, vt = SystemParameters.VirtualScreenTop;
+        double vw = SystemParameters.VirtualScreenWidth, vh = SystemParameters.VirtualScreenHeight;
+        double w = double.IsNaN(width) ? 400 : width;
+        // require a chunk of the title bar to land inside the virtual desktop
+        return left + w > vl + 40 && left < vl + vw - 40 && top >= vt - 2 && top < vt + vh - 24;
+    }
 }

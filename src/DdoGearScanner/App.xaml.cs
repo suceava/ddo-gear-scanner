@@ -25,31 +25,22 @@ public partial class App : Application
         CaptureStore store = new();
         store.SwitchTo(charStore.ActiveId);
 
-        // Capture stack: tracker finds the DDO window, coordinator owns the capture session,
-        // grabber keeps the latest frame for on-demand single-shot capture.
+        // Capture stack: tracker finds the DDO window, coordinator owns the capture session, grabber
+        // caches the latest frame (used by slot calibration to locate the rag-doll on demand).
         _tracker = new GameWindowTracker();
         _coordinator = new CaptureCoordinator(_tracker);
         _grabber = new FrameGrabber();
         _coordinator.FrameArrived += _grabber.OnFrame;
-        // pipeline.OnFrame is also wired below (after pipeline is built) for the detection session.
 
-        // Vision: local OCR reader (Phase 1) + cursor-anchored tooltip detector.
+        // Vision: local OCR reader (Phase 1).
         LocalOcr ocr = new();
         ITooltipReader reader = new LocalOcrTooltipReader(ocr);
 
-        // Match the tooltip's top-corner ornaments, color-blind, one template per quality flourish
-        // (PNGs in the Templates folder). Falls back to the dark-panel heuristic if none load.
-        string tplDir = System.IO.Path.Combine(AppContext.BaseDirectory, "Templates");
-        ITooltipRegionDetector detector =
-            (ITooltipRegionDetector?)CornerTemplateRegionDetector.TryLoadAll(tplDir)
-            ?? new DarkPanelRegionDetector();
-
-        CapturePipeline pipeline = new(_tracker, _grabber, detector, reader, store);
+        CapturePipeline pipeline = new(_tracker, reader, store);
         _coordinator.FrameArrived += pipeline.OnFrame; // drives the detection session
 
-        // Inventory slot detection (rag-doll anchor + calibrated slot offsets).
-        string ragPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Inventory", "ragdoll.png");
-        InventoryLocator? invLocator = InventoryLocator.TryLoad(ragPath);
+        // Inventory slot detection (rag-doll anchor + calibrated slot offsets). Template is embedded.
+        InventoryLocator? invLocator = InventoryLocator.TryLoadEmbedded();
         SlotMap slotMap = SlotMap.Load();
         pipeline.SetInventory(invLocator, slotMap);
         CalibrationController calibration = new(_tracker, _grabber, invLocator, slotMap);
@@ -60,7 +51,6 @@ public partial class App : Application
         overlay.AttachTracker(_tracker);
 
         CaptureListWindow main = new(store, charStore, settings, reader.IsAvailable);
-        main.ScanRequested += pipeline.RequestCapture;
         main.DetectionToggleRequested += () => pipeline.ToggleSession();
         main.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
         calibration.Status += s => { main.SetStatusText(s); overlay.ShowToast(s, true, sticky: true); };

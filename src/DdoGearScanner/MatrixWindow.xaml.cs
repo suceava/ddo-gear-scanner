@@ -36,12 +36,25 @@ public partial class MatrixWindow : Window
 
     private const double StatColWidth = 260;
 
-    private readonly StackingMatrix _matrix;
+    private StackingMatrix _matrix;
 
     public MatrixWindow(StackingMatrix matrix)
     {
         InitializeComponent();
         WindowChrome.UseDarkTitleBar(this);
+        AppSettings s = AppSettings.Instance;
+        WindowChrome.ApplyBounds(this, s.MatrixLeft, s.MatrixTop, s.MatrixWidth, s.MatrixHeight, s.MatrixMaximized);
+        WindowChrome.PersistBounds(this, (l, t, w, h, m) =>
+        {
+            s.MatrixLeft = l; s.MatrixTop = t; s.MatrixWidth = w; s.MatrixHeight = h; s.MatrixMaximized = m;
+        });
+        _matrix = matrix;
+        Build();
+    }
+
+    /// <summary>Refresh with a freshly-analyzed loadout (used when the matrix is reopened/reused).</summary>
+    public void Update(StackingMatrix matrix)
+    {
         _matrix = matrix;
         Build();
     }

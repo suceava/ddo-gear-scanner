@@ -147,6 +147,37 @@ public class TooltipTextParserTests
     }
 
     [Fact]
+    public void MangledEquippedHeaderStrippedFromName()
+    {
+        // OCR mangles "CURRENTLY EQUIPPED"; the header line must drop out, not become the name.
+        GearItem item = TooltipTextParser.ParseText(
+            "CURRENTLY-EC)UIPPED\nVulkoorim Pendant\nEquips to: Neck\nMinimum Level: 9");
+        Assert.Equal("Vulkoorim Pendant", item.Name);
+    }
+
+    [Fact]
+    public void FooterAndFlavorNotCapturedAsMods()
+    {
+        // The line-based fallback (no ▶ bullets) must not scrape footer/flavor into mods.
+        GearItem item = TooltipTextParser.ParseText(
+            "Voice of the Master\nEquips to: Trinket\nMinimum Level: 5\n" +
+            "Durability 100\nAdamantine Hardness 25\nBase Value 2020\n0.1 lbs\n" +
+            "This trinket is a magical polyhedron with runes carved on each side.");
+        Assert.DoesNotContain(item.Mods, m =>
+            m.Stat.Contains("Durab") || m.Stat.Contains("Base Value") || m.Stat.Contains("lbs")
+            || m.Stat.Contains("polyhedron") || m.Stat.Contains("Hardness"));
+    }
+
+    [Fact]
+    public void SetBonusesHeaderIsNotASet()
+    {
+        GearItem item = TooltipTextParser.ParseText(
+            "Some Item\nEquips to: Neck\nSet Bonuses:\nCrypt Raider Set (Heroic):");
+        Assert.DoesNotContain(item.SetBonuses, s => s.SetName.Trim().TrimEnd(':').Equals("Set Bonuses"));
+        Assert.Contains(item.SetBonuses, s => s.SetName.Contains("Crypt Raider"));
+    }
+
+    [Fact]
     public void MultiLineNameThenTypeLine()
     {
         const string t =

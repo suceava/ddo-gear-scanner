@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using OpenCvSharp;
 using OpenCvMat = OpenCvSharp.Mat;
 
@@ -28,6 +29,26 @@ public sealed class InventoryLocator
         using OpenCvMat tpl = Cv2.ImRead(path, ImreadModes.Color);
         if (tpl.Empty()) return null;
         return new InventoryLocator(tpl, threshold);
+    }
+
+    /// <summary>Load the rag-doll template embedded in this assembly, so the published single-file exe
+    /// is self-contained (no loose Inventory\ragdoll.png next to it).</summary>
+    public static InventoryLocator? TryLoadEmbedded(double threshold = 0.6)
+    {
+        try
+        {
+            Assembly asm = typeof(InventoryLocator).Assembly;
+            string? name = asm.GetManifestResourceNames()
+                .FirstOrDefault(n => n.EndsWith("ragdoll.png", StringComparison.OrdinalIgnoreCase));
+            if (name is null) return null;
+            using Stream? s = asm.GetManifestResourceStream(name);
+            if (s is null) return null;
+            using var ms = new MemoryStream();
+            s.CopyTo(ms);
+            using OpenCvMat tpl = Cv2.ImDecode(ms.ToArray(), ImreadModes.Color);
+            return tpl.Empty() ? null : new InventoryLocator(tpl, threshold);
+        }
+        catch { return null; }
     }
 
     public int TemplateWidth => _ragdoll.Width;

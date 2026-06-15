@@ -31,8 +31,6 @@ public sealed record CaptureOutcome(
 public sealed class CapturePipeline
 {
     private readonly GameWindowTracker _tracker;
-    private readonly FrameGrabber _grabber;
-    private readonly ITooltipRegionDetector _detector;
     private readonly ITooltipReader _reader;
     private readonly CaptureStore _store;
 
@@ -157,100 +155,14 @@ public sealed class CapturePipeline
         return new Rect(x, y, w, h);
     }
 
-    public CapturePipeline(
-        GameWindowTracker tracker,
-        FrameGrabber grabber,
-        ITooltipRegionDetector detector,
-        ITooltipReader reader,
-        CaptureStore store)
+    public CapturePipeline(GameWindowTracker tracker, ITooltipReader reader, CaptureStore store)
     {
         _tracker = tracker;
-        _grabber = grabber;
-        _detector = detector;
         _reader = reader;
         _store = store;
     }
 
-    /// <summary>Fire-and-forget capture; result arrives via <see cref="Completed"/>.</summary>
-    public void RequestCapture() => _ = Task.Run(RunOnceAsync);
-
-    private async Task RunOnceAsync()
-    {
-        try
-        {
-            if (!_reader.IsAvailable)
-            {
-                Emit(Fail($"{_reader.BackendName} unavailable (no OCR language pack?)"));
-                return;
-            }
-
-            GameWindowRect? rect = _tracker.CurrentRect;
-            if (rect is null)
-            {
-                Emit(Fail("DDO window not found. Is the game running in windowed/borderless mode?"));
-                return;
-            }
-
-            using OpenCvMat? frame = _grabber.GrabLatest();
-            if (frame is null)
-            {
-                Emit(Fail("No captured frame yet. Give capture a moment after the game appears."));
-                return;
-            }
-
-            (int curX, int curY) = GameWindowTracker.GetCursorScreenPosition();
-            Point cursorInFrame = new(curX - rect.Value.Left, curY - rect.Value.Top);
-
-            // Dump the full frame on every scan (even failures), with the cursor position encoded
-            // in the filename, so detection can be tuned offline against ground truth.
-            DumpDebugFrame(frame, cursorInFrame);
-
-            TooltipRegion? region = _detector.Detect(frame, cursorInFrame);
-            if (region is null)
-            {
-                Emit(Fail("Could not locate a tooltip near the cursor."));
-                return;
-            }
-
-            Rect bounds = region.Value.Bounds;
-            using OpenCvMat crop = new(frame, bounds);
-            byte[] cropPng = EncodePng(crop);
-            string? label = StartDebugDump(cropPng);
-
-            TooltipReadResult read = await ReadWithOptionalDebug(crop, label).ConfigureAwait(false);
-            GearItem? item = read.Item;
-
-            if (item is not null && (!string.IsNullOrWhiteSpace(item.Name) || item.Mods.Count > 0))
-            {
-                if (item.Slot != EquipSlot.Unknown) _store.SetSlot(item.Slot, item);
-                Emit(new CaptureOutcome(
-                    Success: true,
-                    Message: $"Captured \"{item.Name}\" ({item.Mods.Count} mods)",
-                    Item: item,
-                    RawText: read.RawText,
-                    ReadConfidence: read.Confidence,
-                    RegionConfidence: region.Value.Confidence,
-                    Backend: read.Backend,
-                    CropPng: cropPng,
-                    RegionX: bounds.X, RegionY: bounds.Y, RegionW: bounds.Width, RegionH: bounds.Height));
-            }
-            else
-            {
-                Emit(new CaptureOutcome(false, "Read produced no usable text — see raw output.",
-                    item, read.RawText, read.Confidence, region.Value.Confidence, read.Backend, cropPng,
-                    bounds.X, bounds.Y, bounds.Width, bounds.Height));
-            }
-        }
-        catch (Exception ex)
-        {
-            Emit(Fail($"Capture error: {ex.GetType().Name}: {ex.Message}"));
-        }
-    }
-
     private void Emit(CaptureOutcome outcome) => Completed?.Invoke(outcome);
-
-    private static CaptureOutcome Fail(string message)
-        => new(false, message, null, string.Empty, 0, 0, string.Empty, null);
 
     private static byte[] EncodePng(OpenCvMat crop)
     {
@@ -282,19 +194,4 @@ public sealed class CapturePipeline
         => label is not null && _reader is LocalOcrTooltipReader local
             ? local.ReadAsync(crop, DebugDir, label)
             : _reader.ReadAsync(crop);
-
-    // Full frame alongside the crop, with the cursor position (frame px) encoded in the filename,
-    // so detection geometry can be tuned offline against reality.
-    private static void DumpDebugFrame(OpenCvMat frame, Point cursor)
-    {
-        if (!AppSettings.Instance.DebugDumpCrops) return;
-        try
-        {
-            string dir = Path.Combine(AppSettings.AppDataDir, "debug-crops");
-            Directory.CreateDirectory(dir);
-            string path = Path.Combine(dir, $"frame-{DateTime.Now:yyyyMMdd-HHmmss-fff}-c{cursor.X}_{cursor.Y}.png");
-            Cv2.ImWrite(path, frame);
-        }
-        catch { /* debug only */ }
-    }
 }

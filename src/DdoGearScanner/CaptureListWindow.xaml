@@ -62,15 +62,42 @@
 
         <!-- Toolbar -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
-            <Button x:Name="DetectionButton" Content="Detection: OFF" Click="DetectionToggle_Click" />
-            <Button x:Name="ScanButton" Content="Scan now" Click="ScanNow_Click" />
-            <Button x:Name="SetHotkeyButton" Content="Set hotkey" Click="SetHotkey_Click" />
-            <Button x:Name="CalibrateButton" Content="Calibrate slots" Click="Calibrate_Click" />
+            <Button x:Name="MenuButton" Content="☰  Menu" Click="Menu_Click" />
+            <Popup x:Name="MenuPopup" PlacementTarget="{Binding ElementName=MenuButton}" Placement="Bottom"
+                   StaysOpen="False" AllowsTransparency="True" VerticalOffset="3" PopupAnimation="Fade">
+                <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderGold}" BorderThickness="1"
+                        CornerRadius="4" Padding="4" MinWidth="250">
+                    <StackPanel>
+                        <Button x:Name="ClearButton" Style="{StaticResource MenuItemButton}"
+                                Content="Clear Loadout" Click="ClearList_Click" />
+                        <Border Height="1" Background="{StaticResource BorderDim}" Margin="6,5" />
+                        <Button x:Name="DetectionButton" Style="{StaticResource MenuItemButton}"
+                                Content="Toggle Detection (Off)" Click="DetectionToggle_Click" />
+                        <Button x:Name="HotkeyMenuItem" Style="{StaticResource MenuItemButton}"
+                                Content="Set Detection Hotkey (Insert)" Click="SetHotkey_Click" />
+                        <Button x:Name="CalibrateButton" Style="{StaticResource MenuItemButton}"
+                                Content="Calibrate Slots" Click="Calibrate_Click" />
+                    </StackPanel>
+                </Border>
+            </Popup>
             <Button x:Name="MatrixButton" Content="Stacking matrix" Click="Matrix_Click" />
-            <Button x:Name="ClearButton" Content="Clear loadout" Click="ClearList_Click" />
-            <TextBlock x:Name="HotkeyHint" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"
-                       FontSize="12" Margin="6,0,0,0" Text="" />
         </StackPanel>
+
+        <!-- Modal prompt shown while waiting for a hotkey keypress -->
+        <Border x:Name="BindingPrompt" Grid.Row="0" Grid.RowSpan="3" Panel.ZIndex="100"
+                Background="#CC100C07" Visibility="Collapsed" Margin="-14">
+            <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource GoldBright}" BorderThickness="2"
+                    CornerRadius="10" Padding="34,24" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="⌨  Press your detection hotkey" FontSize="20" Style="{StaticResource Title}"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="e.g. Insert, or Ctrl+Shift+G" Foreground="{StaticResource Parchment}"
+                               FontSize="13" HorizontalAlignment="Center" Margin="0,10,0,0" />
+                    <TextBlock Text="Esc to cancel" Foreground="{StaticResource TextMuted}"
+                               FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
+        </Border>
 
         <!-- Loadout sheet (left) | item detail (right) -->
         <Grid Grid.Row="2">

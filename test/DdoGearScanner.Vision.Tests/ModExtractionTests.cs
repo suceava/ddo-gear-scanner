@@ -21,6 +21,8 @@ public class ModExtractionTests
     [InlineData("Mythic Neck Boost +1: +1 Mythic bonus to the target's Physical and Magical Resistance Ratings", "Neck Boost", 1, "Mythic")]
     [InlineData("Protection +6: +6 Deflection bonus to AC.", "Protection", 6, "Deflection")]
     [InlineData("Natural Armor Bonus +8: This item is padded with leather and other natural ingredients, and provides a 8 Natural Armor bonus to AC", "Natural Armor", 8, "Natural Armor")]
+    // OCR puts a space after the minus ("- 20%"); still parse the value, not leave it in the name.
+    [InlineData("Electricity Absorption - 20%: -20% Enhancement bonus to Electricity absorption.", "Electricity Absorption", -20, "Enhancement")]
     public void ExtractsModFromBlock(string block, string stat, int value, string type)
     {
         Mod? mod = TooltipTextParser.ExtractModFromBlock(block);
