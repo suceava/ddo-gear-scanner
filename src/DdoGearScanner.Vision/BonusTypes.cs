@@ -63,6 +63,36 @@ public static class BonusTypes
         "Dodge",
     };
 
+    /// <summary>Curated, deduplicated list for the item-editor dropdown — the general bonus types a
+    /// user would assign to a stat mod. Excludes parser-only OCR aliases (e.g. "Insight" for
+    /// "Insightful"), the rarely-on-gear category entries, and the AC-only bonus types (Armor,
+    /// Shield, Dodge, Deflection, Natural Armor) which only make sense on Armor Class — they'd be
+    /// nonsense on, say, a Constitution mod. (Any type already on an item that isn't here is still
+    /// shown — the editor unions it in.)</summary>
+    public static readonly IReadOnlyList<string> UserSelectable = new[]
+    {
+        "Enhancement",
+        "Insightful",
+        "Quality",
+        "Exceptional",
+        "Profane",
+        "Sacred",
+        "Competence",
+        "Artifact",
+        "Festive",
+        "Morale",
+        "Luck",
+        "Resistance",
+        "Primal",
+        "Alchemical",
+        "Equipment",
+        "Inherent",
+        "Mythic",
+        "Reaper",
+        "Legendary",
+        "Stacking",
+    };
+
     private static readonly HashSet<string> Lookup =
         new(All, StringComparer.OrdinalIgnoreCase);
 

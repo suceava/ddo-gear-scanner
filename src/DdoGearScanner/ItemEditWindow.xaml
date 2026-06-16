@@ -59,7 +59,13 @@
                     </StackPanel>
                     <StackPanel Grid.Row="0" Grid.Column="2">
                         <TextBlock Text="Slot" Style="{StaticResource FieldLabel}" />
-                        <ComboBox x:Name="SlotCombo" DisplayMemberPath="Label" />
+                        <ComboBox x:Name="SlotCombo">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Label}" Foreground="{StaticResource Parchment}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                     </StackPanel>
 
                     <StackPanel Grid.Row="2" Grid.Column="0">
@@ -92,7 +98,7 @@
                                     <CheckBox Grid.Row="0" Grid.Column="2" Content="%" IsChecked="{Binding IsPercent, Mode=TwoWay}"
                                               Foreground="{StaticResource Parchment}" VerticalAlignment="Center" Margin="8,0,2,0" />
                                     <ComboBox Grid.Row="0" Grid.Column="3" Margin="6,0,0,0"
-                                              ItemsSource="{Binding DataContext.BonusTypeOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              ItemsSource="{Binding BonusTypeOptions, RelativeSource={RelativeSource AncestorType=Window}}"
                                               SelectedItem="{Binding BonusType, Mode=TwoWay}" />
                                     <Button Grid.Row="0" Grid.Column="4" Style="{StaticResource RemoveBtn}" Click="RemoveMod_Click" Tag="{Binding}" />
                                     <TextBox Grid.Row="1" Grid.ColumnSpan="5" Margin="0,5,0,0" Foreground="{StaticResource TextMuted}"
@@ -117,7 +123,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <ComboBox Grid.Column="0" ItemsSource="{Binding DataContext.ColorOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                <ComboBox Grid.Column="0" ItemsSource="{Binding ColorOptions, RelativeSource={RelativeSource AncestorType=Window}}"
                                           SelectedItem="{Binding Color, Mode=TwoWay}" />
                                 <CheckBox Grid.Column="1" Content="Empty" IsChecked="{Binding IsEmpty, Mode=TwoWay}"
                                           Foreground="{StaticResource Parchment}" VerticalAlignment="Center" Margin="10,0,6,0" />

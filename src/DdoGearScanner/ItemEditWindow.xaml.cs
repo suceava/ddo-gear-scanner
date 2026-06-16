@@ -96,12 +96,15 @@ public partial class ItemEditWindow : Window
 
     private static IReadOnlyList<string> BuildBonusTypeOptions(GearItem? item)
     {
-        var list = new List<string>(BonusTypes.All);
+        // Curated user-facing list, plus any type already on this item that isn't in it (so an
+        // unusual/OCR'd value still shows). Sorted alphabetically — a predictable scan order.
+        var list = new List<string>(BonusTypes.UserSelectable);
         if (item is not null)
             foreach (Mod m in item.Mods)
-                if (!string.IsNullOrWhiteSpace(m.BonusType) && !list.Contains(m.BonusType))
-                    list.Add(m.BonusType);
-        return list;
+                if (!string.IsNullOrWhiteSpace(m.BonusType)
+                    && !list.Contains(m.BonusType.Trim(), StringComparer.OrdinalIgnoreCase))
+                    list.Add(m.BonusType.Trim());
+        return list.OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private void LoadFrom(GearItem item)
