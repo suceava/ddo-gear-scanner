@@ -29,44 +29,77 @@ internal static class WindowChrome
         else window.SourceInitialized += (_, _) => Apply(new WindowInteropHelper(window).Handle);
     }
 
-    /// <summary>Restore a window's saved size + position (NaN values keep the XAML default), skipping
-    /// an off-screen position (e.g. a monitor that's since been unplugged), then maximized state.</summary>
-    public static void ApplyBounds(Window w, double left, double top, double width, double height, bool maximized)
+    // Window placement persistence via the Win32 WINDOWPLACEMENT API. WPF's Left/Top are DIPs and
+    // restoring them by hand is fragile across multiple monitors / mixed DPI (the window ends up
+    // off-screen, so WPF cascades it to a "random" default spot). SetWindowPlacement takes physical
+    // workspace pixels, is DPI- and multi-monitor-correct, and the OS clamps a saved position onto a
+    // visible monitor automatically (so an unplugged monitor no longer strands the window).
+
+    private const int SW_SHOWNORMAL = 1;
+    private const int SW_SHOWMAXIMIZED = 3;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int X, Y; public POINT(int x, int y) { X = x; Y = y; } }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WINDOWPLACEMENT
     {
-        if (width > 100) w.Width = width;          // NaN comparisons are false => keep default
-        if (height > 100) w.Height = height;
-        if (!double.IsNaN(left) && !double.IsNaN(top) && OnScreen(left, top, w.Width, w.Height))
-        {
-            w.WindowStartupLocation = WindowStartupLocation.Manual;
-            w.Left = left;
-            w.Top = top;
-        }
-        if (maximized) w.WindowState = WindowState.Maximized;
+        public int length, flags, showCmd;
+        public POINT ptMinPosition, ptMaxPosition;
+        public RECT rcNormalPosition;
     }
 
-    /// <summary>Persist a window's bounds continuously (on move / resize / maximize) while it's alive.
-    /// Done live rather than at Close because RestoreBounds is empty once a window starts closing —
-    /// which silently lost the bounds of secondary windows during app shutdown. Uses RestoreBounds so
-    /// a maximized window still saves its underlying normal size. <paramref name="save"/> writes
-    /// (left, top, width, height, maximized).</summary>
+    [DllImport("user32.dll")] private static extern bool SetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+    [DllImport("user32.dll")] private static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+    /// <summary>Restore a window's saved placement (position + size + maximized). NaN / non-positive
+    /// values mean "nothing saved" → keep the XAML default. The OS clamps the saved rect onto a
+    /// currently-visible monitor, so a stale position can never strand the window off-screen.</summary>
+    public static void ApplyBounds(Window w, double left, double top, double width, double height, bool maximized)
+    {
+        if (double.IsNaN(left) || double.IsNaN(top) || double.IsNaN(width) || double.IsNaN(height)
+            || width < 100 || height < 100)
+            return;
+
+        void Apply()
+        {
+            IntPtr hwnd = new WindowInteropHelper(w).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            WINDOWPLACEMENT wp = default;
+            wp.length = Marshal.SizeOf<WINDOWPLACEMENT>();
+            wp.flags = 0;
+            wp.showCmd = maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+            wp.ptMinPosition = new POINT(-1, -1);
+            wp.ptMaxPosition = new POINT(-1, -1);
+            wp.rcNormalPosition = new RECT { Left = (int)left, Top = (int)top, Right = (int)(left + width), Bottom = (int)(top + height) };
+            SetWindowPlacement(hwnd, ref wp);
+        }
+
+        if (new WindowInteropHelper(w).Handle != IntPtr.Zero) Apply();
+        else w.SourceInitialized += (_, _) => Apply();
+    }
+
+    /// <summary>Persist a window's placement continuously (on move / resize / maximize) while it's
+    /// alive — done live rather than at Close because the handle/placement are gone once a window
+    /// starts closing. Stores the NORMAL (un-maximized) rect so a maximized window still restores to a
+    /// sensible size. <paramref name="save"/> receives (left, top, width, height, maximized) in pixels.</summary>
     public static void PersistBounds(Window w, Action<double, double, double, double, bool> save)
     {
         void Save()
         {
-            System.Windows.Rect b = w.RestoreBounds;
-            if (!b.IsEmpty) save(b.Left, b.Top, b.Width, b.Height, w.WindowState == WindowState.Maximized);
+            IntPtr hwnd = new WindowInteropHelper(w).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            WINDOWPLACEMENT wp = default;
+            wp.length = Marshal.SizeOf<WINDOWPLACEMENT>();
+            if (!GetWindowPlacement(hwnd, ref wp)) return;
+            RECT r = wp.rcNormalPosition;
+            save(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top, wp.showCmd == SW_SHOWMAXIMIZED);
         }
         w.LocationChanged += (_, _) => Save();
         w.SizeChanged += (_, _) => Save();
         w.StateChanged += (_, _) => Save();
-    }
-
-    private static bool OnScreen(double left, double top, double width, double height)
-    {
-        double vl = SystemParameters.VirtualScreenLeft, vt = SystemParameters.VirtualScreenTop;
-        double vw = SystemParameters.VirtualScreenWidth, vh = SystemParameters.VirtualScreenHeight;
-        double w = double.IsNaN(width) ? 400 : width;
-        // require a chunk of the title bar to land inside the virtual desktop
-        return left + w > vl + 40 && left < vl + vw - 40 && top >= vt - 2 && top < vt + vh - 24;
     }
 }
