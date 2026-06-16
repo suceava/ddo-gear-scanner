@@ -22,7 +22,7 @@ public sealed class SlotRow : INotifyPropertyChanged
         set
         {
             _item = value;
-            foreach (string p in new[] { nameof(Item), nameof(HasItem), nameof(Name), nameof(Sub) })
+            foreach (string p in new[] { nameof(Item), nameof(HasItem), nameof(Name), nameof(Sub), nameof(Badge) })
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
         }
     }
@@ -35,6 +35,10 @@ public sealed class SlotRow : INotifyPropertyChanged
     public string Sub => _item is null ? ""
         : $"ML {_item.MinimumLevel?.ToString() ?? "?"}  ·  {_item.Mods.Count} mods"
           + (_item.SetBonuses.Count > 0 ? "  ·  set" : "");
+
+    /// <summary>Tiny status glyphs: 🔒 = locked (re-capture skips it), ✎ = hand-edited.</summary>
+    public string Badge => _item is null ? ""
+        : (_item.Locked ? "🔒 " : "") + (_item.Edited ? "✎" : "");
 
     public event PropertyChangedEventHandler? PropertyChanged;
 }

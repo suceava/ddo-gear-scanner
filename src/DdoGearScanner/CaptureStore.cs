@@ -49,6 +49,14 @@ public sealed class CaptureStore
 
     public GearItem? Get(EquipSlot slot) => Loadout.TryGetValue(slot, out GearItem? i) ? i : null;
 
+    /// <summary>True if the slot holds a user-locked item (re-capture must not overwrite it).</summary>
+    public bool IsLocked(EquipSlot slot) => Get(slot)?.Locked == true;
+
+    public void Remove(EquipSlot slot)
+    {
+        if (Loadout.Remove(slot)) Save();
+    }
+
     public void Clear()
     {
         Loadout.Clear();

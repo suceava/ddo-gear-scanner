@@ -1,0 +1,149 @@
+<Window x:Class="DdoGearScanner.ItemEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Edit Item" Width="660" Height="760" MinWidth="520" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/appicon.ico"
+        Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}">
+    <Window.Resources>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Margin" Value="0,0,0,2" />
+        </Style>
+        <Style x:Key="RemoveBtn" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Content" Value="✕" />
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+            <Setter Property="Foreground" Value="#D98A6A" />
+            <Setter Property="BorderBrush" Value="#5A3A2E" />
+        </Style>
+        <Style x:Key="AddBtn" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+            <Setter Property="Padding" Value="10,4" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Footer buttons -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource BgPanel}" Padding="16,12"
+                BorderBrush="{StaticResource BorderDim}" BorderThickness="0,1,0,0">
+            <DockPanel>
+                <ToggleButton x:Name="LockToggle" DockPanel.Dock="Left" Content="🔓 Unlocked" Width="120"
+                              Click="LockToggle_Click" Background="{StaticResource BgRaised}"
+                              Foreground="{StaticResource Parchment}" BorderBrush="{StaticResource BorderGold}"
+                              BorderThickness="1" Padding="8,5" Cursor="Hand" />
+                <Button x:Name="DeleteButton" DockPanel.Dock="Left" Content="Delete" Click="Delete_Click"
+                        Background="#3A2018" BorderBrush="#7A4030" Margin="10,0,0,0" Visibility="Collapsed" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Cancel" Click="Cancel_Click" Margin="8,0,0,0" />
+                    <Button Content="Save" Click="Save_Click" Background="{StaticResource SelectionBg}" Margin="8,0,0,0" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="18,14">
+            <StackPanel>
+                <TextBlock x:Name="Heading" Text="Edit Item" FontSize="18" Style="{StaticResource Title}" Margin="0,0,0,10" />
+
+                <!-- header fields -->
+                <Grid>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="14" /><ColumnDefinition Width="190" /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition /><RowDefinition Height="10" /><RowDefinition /></Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Grid.Column="0">
+                        <TextBlock Text="Name" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="NameBox" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="0" Grid.Column="2">
+                        <TextBlock Text="Slot" Style="{StaticResource FieldLabel}" />
+                        <ComboBox x:Name="SlotCombo" DisplayMemberPath="Label" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2" Grid.Column="0">
+                        <TextBlock Text="Item type" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="TypeBox" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="2">
+                        <TextBlock Text="Min Level" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="MlBox" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- MODS -->
+                <TextBlock Text="MODS" Style="{StaticResource Section}" />
+                <ItemsControl x:Name="ModsList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource BgPanel}" CornerRadius="4" Padding="8,6" Margin="0,0,0,6">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="56" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="146" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Row="0" Grid.Column="0" Text="{Binding Stat, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="6,0,0,0" />
+                                    <CheckBox Grid.Row="0" Grid.Column="2" Content="%" IsChecked="{Binding IsPercent, Mode=TwoWay}"
+                                              Foreground="{StaticResource Parchment}" VerticalAlignment="Center" Margin="8,0,2,0" />
+                                    <ComboBox Grid.Row="0" Grid.Column="3" Margin="6,0,0,0"
+                                              ItemsSource="{Binding DataContext.BonusTypeOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              SelectedItem="{Binding BonusType, Mode=TwoWay}" />
+                                    <Button Grid.Row="0" Grid.Column="4" Style="{StaticResource RemoveBtn}" Click="RemoveMod_Click" Tag="{Binding}" />
+                                    <TextBox Grid.Row="1" Grid.ColumnSpan="5" Margin="0,5,0,0" Foreground="{StaticResource TextMuted}"
+                                             Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="Description (optional)" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Style="{StaticResource AddBtn}" Content="+ Add mod" Click="AddMod_Click" />
+
+                <!-- AUGMENTS -->
+                <TextBlock Text="AUGMENTS" Style="{StaticResource Section}" />
+                <ItemsControl x:Name="AugList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox Grid.Column="0" ItemsSource="{Binding DataContext.ColorOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          SelectedItem="{Binding Color, Mode=TwoWay}" />
+                                <CheckBox Grid.Column="1" Content="Empty" IsChecked="{Binding IsEmpty, Mode=TwoWay}"
+                                          Foreground="{StaticResource Parchment}" VerticalAlignment="Center" Margin="10,0,6,0" />
+                                <TextBox Grid.Column="2" Text="{Binding Filled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ToolTip="Augment in the slot (if not empty)" />
+                                <Button Grid.Column="3" Style="{StaticResource RemoveBtn}" Click="RemoveAug_Click" Tag="{Binding}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Style="{StaticResource AddBtn}" Content="+ Add augment" Click="AddAug_Click" />
+
+                <!-- SET BONUSES -->
+                <TextBlock Text="SET BONUSES" Style="{StaticResource Section}" />
+                <ItemsControl x:Name="SetList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,5">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                <Button Grid.Column="1" Style="{StaticResource RemoveBtn}" Click="RemoveSet_Click" Tag="{Binding}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Style="{StaticResource AddBtn}" Content="+ Add set bonus" Click="AddSet_Click" />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

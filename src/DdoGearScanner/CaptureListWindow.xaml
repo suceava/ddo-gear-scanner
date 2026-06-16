@@ -116,9 +116,12 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="78" />
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{Binding Label}" Foreground="{StaticResource Gold}"
                                            FontSize="11" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding Badge}" FontSize="11" VerticalAlignment="Center"
+                                           Foreground="{StaticResource Gold}" Margin="4,0,2,0" />
                                 <StackPanel Grid.Column="1">
                                     <TextBlock Text="{Binding Name}" FontSize="14">
                                         <TextBlock.Style>
@@ -153,6 +156,18 @@
                                    HorizontalAlignment="Center"
                                    RenderOptions.BitmapScalingMode="HighQuality" />
                         </Border>
+
+                        <StackPanel x:Name="ActionBar" Orientation="Horizontal" Margin="0,0,0,10">
+                            <Button x:Name="EditButton" Content="Edit item" Click="EditItem_Click" Padding="12,4"
+                                    Visibility="Collapsed" />
+                            <Button x:Name="AddButton" Content="+ Add item" Click="AddItem_Click" Padding="12,4"
+                                    Visibility="Collapsed" />
+                            <ToggleButton x:Name="LockButton" Content="🔓 Lock" Click="LockItem_Click" Margin="8,0,0,0"
+                                          Padding="10,4" Visibility="Collapsed"
+                                          Background="{StaticResource BgRaised}" Foreground="{StaticResource Parchment}"
+                                          BorderBrush="{StaticResource BorderGold}" BorderThickness="1" Cursor="Hand"
+                                          ToolTip="Locked items are never overwritten by a re-capture." />
+                        </StackPanel>
 
                         <TextBlock x:Name="LastName" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap"
                                    Text="(select a slot)" />

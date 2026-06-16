@@ -124,6 +124,15 @@ public sealed class CapturePipeline
             if (slot is null) return;
         }
 
+        // A user-locked slot is never overwritten by a re-capture (skip before doing the OCR work).
+        if (slot is EquipSlot locked && _store.IsLocked(locked))
+        {
+            Log($"slot {locked} is locked — skipping re-capture");
+            Emit(new CaptureOutcome(false, $"{SlotInfo.Label(locked)} is locked — re-capture skipped",
+                null, string.Empty, 0, 0, string.Empty, null));
+            return;
+        }
+
         OpenCvMat crop = new OpenCvMat(frame, b).Clone();
 
         _ = Task.Run(async () =>
@@ -136,8 +145,9 @@ public sealed class CapturePipeline
                 GearItem? item = read.Item;
                 if (slot is EquipSlot s && item is not null) item = item with { Slot = s };
                 bool ok = item is not null && (!string.IsNullOrWhiteSpace(item.Name) || item.Mods.Count > 0);
-                // Overwrite the slot in the loadout (re-capturing a slot updates it, not a new entry).
-                if (ok && item!.Slot != EquipSlot.Unknown) _store.SetSlot(item.Slot, item);
+                // Overwrite the slot in the loadout (re-capturing a slot updates it, not a new entry),
+                // unless the user locked it (uncalibrated path can resolve the slot only here).
+                if (ok && item!.Slot != EquipSlot.Unknown && !_store.IsLocked(item.Slot)) _store.SetSlot(item.Slot, item);
                 Emit(new CaptureOutcome(ok,
                     ok ? $"Captured \"{item!.Name}\" → {SlotInfo.Label(item.Slot)}" : "Tooltip seen but no text read.",
                     item, read.RawText, read.Confidence, 1.0, read.Backend, png, b.X, b.Y, b.Width, b.Height));

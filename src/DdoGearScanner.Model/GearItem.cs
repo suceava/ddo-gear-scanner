@@ -82,7 +82,11 @@ public sealed record GearItem(
     string? Binding,
     bool IsLikelyNamed,
     string RawOcrText,
-    DateTime CapturedUtc)
+    DateTime CapturedUtc,
+    // User-driven: Locked items are never overwritten by a re-capture (the user toggles this; it is
+    // never set automatically). Edited marks an item that was hand-corrected in the item editor.
+    bool Locked = false,
+    bool Edited = false)
 {
     public static GearItem Empty(string rawOcrText) => new(
         Name: string.Empty,

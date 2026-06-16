@@ -132,6 +132,17 @@ public partial class CaptureListWindow : Window
 
     private void ShowItem(GearItem? item, BitmapImage? crop)
     {
+        // Action bar: a slot must be selected to add; an item must exist to edit/lock.
+        bool slotSelected = SlotSheet.SelectedItem is SlotRow;
+        EditButton.Visibility = item is not null ? Visibility.Visible : Visibility.Collapsed;
+        LockButton.Visibility = item is not null ? Visibility.Visible : Visibility.Collapsed;
+        AddButton.Visibility = (item is null && slotSelected) ? Visibility.Visible : Visibility.Collapsed;
+        if (item is not null)
+        {
+            LockButton.IsChecked = item.Locked;
+            LockButton.Content = item.Locked ? "🔒 Locked" : "🔓 Lock";
+        }
+
         if (item is null)
         {
             LastName.Text = "— empty —";
@@ -232,6 +243,66 @@ public partial class CaptureListWindow : Window
         _matrixWindow = new MatrixWindow(matrix) { Owner = this };
         _matrixWindow.Closed += (_, _) => _matrixWindow = null;
         _matrixWindow.Show();
+    }
+
+    // ---- item editing ----
+
+    private void EditItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (SlotSheet.SelectedItem is SlotRow row && row.Item is not null) OpenEditor(row.Item, row.Slot);
+    }
+
+    private void AddItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (SlotSheet.SelectedItem is SlotRow row) OpenEditor(null, row.Slot);
+    }
+
+    private void OpenEditor(GearItem? existing, EquipSlot slot)
+    {
+        var dlg = new ItemEditWindow(existing, slot) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        EquipSlot target = dlg.TargetSlot;
+        if (dlg.Result is null)
+        {
+            _store.Remove(slot);                                   // Delete
+            StatusText.Text = $"Removed item from {SlotInfo.Label(slot)}.";
+        }
+        else
+        {
+            if (existing is not null && slot != target) _store.Remove(slot); // moved to another slot
+            _store.SetSlot(target, dlg.Result);
+            StatusText.Text = $"Saved \"{dlg.Result.Name}\" → {SlotInfo.Label(target)}.";
+        }
+
+        // The edited slot no longer matches its capture crop; drop it so we don't show a stale image.
+        _crops.Remove(slot);
+        if (target != slot) _crops.Remove(target);
+        AfterLoadoutChange(dlg.Result is null ? slot : target);
+    }
+
+    /// <summary>Quick lock toggle from the detail panel — no editor needed.</summary>
+    private void LockItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (SlotSheet.SelectedItem is not SlotRow row || row.Item is null) return;
+        bool locked = LockButton.IsChecked == true;
+        GearItem updated = row.Item with { Locked = locked };
+        _store.SetSlot(row.Slot, updated);
+        row.Item = updated;                                        // refreshes the badge
+        LockButton.Content = locked ? "🔒 Locked" : "🔓 Lock";
+        StatusText.Text = locked
+            ? $"{SlotInfo.Label(row.Slot)} locked — a re-capture won't overwrite it."
+            : $"{SlotInfo.Label(row.Slot)} unlocked.";
+    }
+
+    private void AfterLoadoutChange(EquipSlot focus)
+    {
+        RefreshLoadout();
+        SlotRow? row = _rows.FirstOrDefault(r => r.Slot == focus);
+        SlotSheet.SelectedItem = row;
+        ShowItem(row?.Item, row is null ? null : _crops.GetValueOrDefault(row.Slot));
+        if (_matrixWindow is not null)
+            _matrixWindow.Update(Vision.StackingAnalyzer.Analyze(_store.Loadout, _charStore.Active.PlaystyleKey));
     }
 
     // ---- characters ----
