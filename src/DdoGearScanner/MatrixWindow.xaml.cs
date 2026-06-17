@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using DdoGearScanner.Model;
 using DdoGearScanner.Vision;
@@ -37,6 +38,9 @@ public partial class MatrixWindow : Window
     private const double StatColWidth = 260;
 
     private StackingMatrix _matrix;
+    // Stats the user has collapsed (key = stat name; a stat lives in exactly one tier). Multi-type
+    // stats are expanded by default; collapsing hides the per-type rows and summarizes per-slot.
+    private readonly HashSet<string> _collapsedStats = new(StringComparer.OrdinalIgnoreCase);
 
     public MatrixWindow(StackingMatrix matrix)
     {
@@ -99,75 +103,100 @@ public partial class MatrixWindow : Window
                 HeaderFg, er, 0, left: true);
         }
 
-        char? lastTier = null;
-        bool firstRow = true;
-        int zebra = 0;
-        foreach (MatrixRow row in rows)
+        // Grouped: priority tier → stat (collapsible) → bonus-type rows. A stat with multiple bonus
+        // types gets a parent header showing the cross-type SUM (different types stack); its per-type
+        // rows sit underneath. The tier letter is conveyed by the band, so no per-row A/B badge.
+        foreach (var tier in rows.GroupBy(r => r.Priority))
         {
-            if (firstRow || lastTier != row.Priority)
+            // ---- prominent priority band (spans all columns) ----
+            int br = AddRow(MatrixGrid);
+            Span(MatrixGrid, new Border { Background = TierBandBg(tier.Key) }, br, 0, cols);
+            int statCount = tier.Select(r => r.Stat).Distinct().Count();
+            var band = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(10, 9, 8, 8), VerticalAlignment = VerticalAlignment.Center };
+            band.Children.Add(new Border { Background = TierColor(tier.Key), Width = 4, CornerRadius = new CornerRadius(2), Margin = new Thickness(0, 1, 9, 1) });
+            band.Children.Add(new TextBlock { Text = TierLabel(tier.Key), Foreground = TierColor(tier.Key), FontWeight = FontWeights.Bold, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center });
+            band.Children.Add(new TextBlock { Text = $"   {statCount} stat{(statCount == 1 ? "" : "s")}", Foreground = HeaderFg, FontSize = 11, VerticalAlignment = VerticalAlignment.Center });
+            Place(MatrixGrid, band, br, 0);
+
+            int zebra = 0;
+            foreach (var statGrp in tier.GroupBy(r => r.Stat))
             {
-                firstRow = false;
-                lastTier = row.Priority;
-                int sr = AddRow(MatrixGrid);
-                PlaceText(MatrixGrid, TierLabel(row.Priority), TierColor(row.Priority), sr, 0, bold: true, left: true, size: 11, topPad: 14);
-                zebra = 0;
-            }
+                var typeRows = statGrp.ToList();
+                string stat = statGrp.Key;
+                bool multi = typeRows.Count > 1;
+                bool statOverride = typeRows.Any(t => t.HasOverride);
+                bool isPct = typeRows.Count(t => t.IsPercent) * 2 >= typeRows.Count;
+                double statTotal = typeRows.Sum(t => t.Effective);   // types stack → sum across them
+                bool collapsed = multi && _collapsedStats.Contains(stat);
 
-            int r = AddRow(MatrixGrid);
-            if (zebra++ % 2 == 1) Span(MatrixGrid, new Border { Background = RowBg }, r, 0, cols);
-            if (row.HasOverride)
-                Span(MatrixGrid, new Border { Background = Amber, Width = 3, CornerRadius = new CornerRadius(2), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 4) }, r, 0, 1);
+                // ---- stat row (parent for a multi-type stat, or the lone row) ----
+                int r = AddRow(MatrixGrid);
+                if (zebra++ % 2 == 1) Span(MatrixGrid, new Border { Background = RowBg }, r, 0, cols);
+                if (statOverride)
+                    Span(MatrixGrid, new Border { Background = Amber, Width = 3, CornerRadius = new CornerRadius(2), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 4) }, r, 0, 1);
 
-            var label = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(12, 5, 6, 5), VerticalAlignment = VerticalAlignment.Center };
-            if (row.Priority is char rank)
-                label.Children.Add(new Border
+                var label = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(12, 5, 6, 5), VerticalAlignment = VerticalAlignment.Center };
+                if (multi)
+                    label.Children.Add(new TextBlock { Text = collapsed ? "▸" : "▾", Foreground = Amber, FontSize = 11, Margin = new Thickness(0, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center });
+                label.Children.Add(new TextBlock
                 {
-                    Background = TierColor(rank), CornerRadius = new CornerRadius(4), Width = 16, Height = 16,
-                    Margin = new Thickness(0, 0, 7, 0), VerticalAlignment = VerticalAlignment.Center,
-                    Child = new TextBlock { Text = rank.ToString(), Foreground = Frozen(0x14, 0x16, 0x1B), FontSize = 10, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center },
+                    Text = stat,
+                    Foreground = statOverride ? Amber : HeaderStrong,
+                    FontWeight = FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                 });
-            label.Children.Add(new TextBlock
-            {
-                Text = row.Stat,
-                Foreground = row.HasOverride ? Amber : HeaderStrong,
-                FontWeight = FontWeights.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            });
-            label.Children.Add(new Border
-            {
-                Background = ChipBg, CornerRadius = new CornerRadius(8), Padding = new Thickness(7, 1, 7, 1),
-                Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
-                Child = new TextBlock { Text = row.BonusType, Foreground = HeaderFg, FontSize = 10.5 },
-            });
-            // Show a total only when it genuinely adds up (a self-stacking type with 2+ live sources).
-            if (row.Cells.Count(c => c.Counts) > 1)
-                label.Children.Add(new Border
+                if (multi)
+                    label.Children.Add(TotalChip(Fmt(statTotal, isPct)));
+                else
                 {
-                    Background = TotalBg, CornerRadius = new CornerRadius(8), Padding = new Thickness(7, 1, 7, 1),
-                    Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
-                    Child = new TextBlock { Text = "= " + Fmt(row.Effective, row.IsPercent), Foreground = TotalFg, FontSize = 11, FontWeight = FontWeights.Bold },
-                });
-            Place(MatrixGrid, label, r, 0);
+                    label.Children.Add(TypeChip(typeRows[0].BonusType));
+                    if (typeRows[0].Cells.Count(c => c.Counts) > 1)
+                        label.Children.Add(TotalChip(Fmt(typeRows[0].Effective, typeRows[0].IsPercent)));
+                }
+                if (multi)
+                {
+                    label.Cursor = Cursors.Hand;
+                    string key = stat;
+                    label.MouseLeftButtonUp += (_, _) => { if (!_collapsedStats.Remove(key)) _collapsedStats.Add(key); Build(); };
+                }
+                Place(MatrixGrid, label, r, 0);
 
-            for (int s = 0; s < slots.Count; s++)
-            {
-                EquipSlot slot = slots[s];
-                var cells = row.Cells.Where(c => c.Slot == slot).ToList();
-                if (cells.Count == 0)
-                {
-                    PlaceText(MatrixGrid, "·", Faint, r, s + 1);
-                    continue;
-                }
-                var sp = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(6, 4, 6, 4) };
-                foreach (MatrixCell c in cells)
-                {
-                    Border pill = Pill(Fmt(c.Value, c.IsPercent), c.Counts ? CountFg : OverFg, c.Counts ? CountBg : OverBg, strike: c.Overridden);
-                    pill.ToolTip = c.Counts ? row.BonusType : $"overridden — a higher {row.BonusType} bonus wins";
-                    pill.Margin = new Thickness(0, 1, 0, 1);
-                    sp.Children.Add(pill);
-                }
-                Place(MatrixGrid, sp, r, s + 1);
+                // Stat-row cells: lone stat → its detail; collapsed → per-slot combined summary;
+                // expanded parent → faded (the per-type rows below carry the detail).
+                if (!multi)
+                    PlaceCells(typeRows[0], slots, r);
+                else if (collapsed)
+                    for (int s = 0; s < slots.Count; s++)
+                    {
+                        EquipSlot slot = slots[s];
+                        double sum = typeRows.SelectMany(t => t.Cells).Where(c => c.Slot == slot && c.Counts).Sum(c => c.Value);
+                        if (sum != 0)
+                        {
+                            var sp = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(6, 4, 6, 4) };
+                            sp.Children.Add(Pill(Fmt(sum, isPct), CountFg, CountBg));
+                            Place(MatrixGrid, sp, r, s + 1);
+                        }
+                        else PlaceText(MatrixGrid, "·", Faint, r, s + 1);
+                    }
+                else
+                    for (int s = 0; s < slots.Count; s++) PlaceText(MatrixGrid, "·", Faint, r, s + 1);
+
+                // ---- per-type rows (multi-type, expanded) ----
+                if (multi && !collapsed)
+                    foreach (MatrixRow tr in typeRows)
+                    {
+                        int cr = AddRow(MatrixGrid);
+                        if (zebra++ % 2 == 1) Span(MatrixGrid, new Border { Background = RowBg }, cr, 0, cols);
+                        if (tr.HasOverride)
+                            Span(MatrixGrid, new Border { Background = Amber, Width = 3, CornerRadius = new CornerRadius(2), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 3, 0, 3) }, cr, 0, 1);
+                        var clabel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(36, 3, 6, 3), VerticalAlignment = VerticalAlignment.Center };
+                        clabel.Children.Add(TypeChip(tr.BonusType));
+                        if (tr.Cells.Count(c => c.Counts) > 1)
+                            clabel.Children.Add(TotalChip(Fmt(tr.Effective, tr.IsPercent)));
+                        Place(MatrixGrid, clabel, cr, 0);
+                        PlaceCells(tr, slots, cr);
+                    }
             }
         }
 
@@ -226,6 +255,40 @@ public partial class MatrixWindow : Window
         },
     };
 
+    private static Border TotalChip(string text) => new()
+    {
+        Background = TotalBg, CornerRadius = new CornerRadius(8), Padding = new Thickness(7, 1, 7, 1),
+        Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+        Child = new TextBlock { Text = text, Foreground = TotalFg, FontSize = 11, FontWeight = FontWeights.Bold },
+    };
+
+    private static Border TypeChip(string text) => new()
+    {
+        Background = ChipBg, CornerRadius = new CornerRadius(8), Padding = new Thickness(7, 1, 7, 1),
+        Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center,
+        Child = new TextBlock { Text = text, Foreground = HeaderFg, FontSize = 10.5 },
+    };
+
+    /// <summary>Render one stat/type row's per-slot pills across the fixed slot columns.</summary>
+    private void PlaceCells(MatrixRow row, List<EquipSlot> slots, int r)
+    {
+        for (int s = 0; s < slots.Count; s++)
+        {
+            EquipSlot slot = slots[s];
+            var cells = row.Cells.Where(c => c.Slot == slot).ToList();
+            if (cells.Count == 0) { PlaceText(MatrixGrid, "·", Faint, r, s + 1); continue; }
+            var sp = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(6, 4, 6, 4) };
+            foreach (MatrixCell c in cells)
+            {
+                Border pill = Pill(Fmt(c.Value, c.IsPercent), c.Counts ? CountFg : OverFg, c.Counts ? CountBg : OverBg, strike: c.Overridden);
+                pill.ToolTip = c.Counts ? row.BonusType : $"overridden — a higher {row.BonusType} bonus wins";
+                pill.Margin = new Thickness(0, 1, 0, 1);
+                sp.Children.Add(pill);
+            }
+            Place(MatrixGrid, sp, r, s + 1);
+        }
+    }
+
     private static string TierLabel(char? rank) => rank switch
     {
         'A' => "PRIORITY A  ·  core",
@@ -240,6 +303,15 @@ public partial class MatrixWindow : Window
         'B' => TierSilver,
         'C' => TierBronze,
         _ => HeaderFg,
+    };
+
+    // Tinted full-width band behind each priority header — warm gold / cool silver / bronze.
+    private static Brush TierBandBg(char? rank) => rank switch
+    {
+        'A' => Frozen(0x32, 0x28, 0x12),
+        'B' => Frozen(0x24, 0x27, 0x2C),
+        'C' => Frozen(0x30, 0x22, 0x14),
+        _ => Frozen(0x20, 0x1B, 0x12),
     };
 
     private static string Fmt(double v, bool pct)

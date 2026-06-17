@@ -68,6 +68,7 @@ public partial class ItemEditWindow : Window
 
         BonusTypeOptions = BuildBonusTypeOptions(item);
         InitializeComponent();
+        WindowChrome.UseDarkTitleBar(this);
 
         var slotOptions = SlotInfo.DisplayOrder.Select(s => new SlotOption(s, SlotInfo.Label(s))).ToList();
         SlotCombo.ItemsSource = slotOptions;
