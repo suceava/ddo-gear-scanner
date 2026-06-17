@@ -64,8 +64,27 @@ coordinates line up. Falls back to line-by-line parse when no bullets are found.
 - `src/DdoGearScanner.Model` — `GearItem`, `Mod`, `AugmentSlot`, `SetBonus`, `EquipSlot`. Pure, no deps.
 - `src/DdoGearScanner.Capture` — capture (copied from pg-loot) + `GameWindowTracker` (DDO match, DWM bounds) + `FrameGrabber`.
 - `src/DdoGearScanner.Vision` — `LocalOcr`, `TooltipChangeDetector` (the working detector), `TooltipTextParser`, `InventoryLocator`, `ITooltipReader`/`LocalOcrTooltipReader`, + dead detectors.
-- `src/DdoGearScanner` — WPF app: `App`, `CaptureListWindow` (loadout sheet + detail), `OverlayWindow` (toast + highlight), `LowLevelKeyHook` + `HotkeyTrigger`, `CapturePipeline`, `CalibrationController`, `SlotMap`, `SlotInfo`, `SlotRow`, `CaptureStore` (loadout.json), `AppSettings`.
+- `src/DdoGearScanner` — WPF app: `App`, `CaptureListWindow` (loadout sheet + detail + the `ItemEditWindow` editor), `OverlayWindow` (toast + highlight), `LowLevelKeyHook` + `HotkeyTrigger`, `CapturePipeline`, `CalibrationController`, `SlotMap`, `SlotInfo`, `SlotRow`, `CaptureStore` (loadout.json), `MatrixWindow` (stacking puzzle), `AppSettings`.
+- `tools/DdoDataImporter` — re-runnable console tool that imports DDOBuilderV2's game data → `data/items.json` + `data/bonustypes.json`. See its README.
+- `data/` — generated catalog (structured data; NOT `assets/`, which is binary media like ragdoll.png). `bonustypes.json` is embedded into Vision and is the authoritative stacking source.
 - `test/DdoGearScanner.Vision.Tests` — parser fixtures + dev diagnostics (machine-specific, read from %APPDATA%).
+
+## DDOBuilder data import (the item DB + authoritative bonus types)
+
+[DDOBuilderV2](https://github.com/Maetrim/DDOBuilderV2) ships a full structured item database (~8,500
+`.item` XMLs) and the game's real bonus-type stacking rules, in the same split `Stat/Value/BonusType`
+model we use. `tools/DdoDataImporter` (run: `dotnet run --project tools/DdoDataImporter`) sparse-clones
+that data, converts it, and writes `data/items.json` + `data/bonustypes.json` — built to be a scheduled
+refresh, not a one-off.
+
+**Bonus-type STACKING is now data-driven and authoritative.** `BonusTypes.StacksWithSelf` loads the
+self-stacking set from the embedded `bonustypes.json` (`Stacking == "Always"`). The previous
+hand-crawled list (`GAME_RULES.md`) was WRONG — it stacked Artifact/Primal/Circumstance/Feat/Epic
+(actually Highest Only) and missed Destiny/Unique/Penalty/Weapon DR/Armor&Shield Enhancement. The only
+self-stacking types are Armor Enhancement, Destiny, Mythic, Penalty, Reaper, Shield Enhancement,
+Stacking, Unique, Untyped, Weapon DR. `items.json` is generated but not yet consumed (named-item
+matching is the next step). `BonusTypes.All`/`UserSelectable` stay curated (parser prefixes / editor
+dropdown) — only stacking comes from the data.
 
 ## Two-app context
 

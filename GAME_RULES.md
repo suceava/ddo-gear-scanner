@@ -1,5 +1,13 @@
 # DDO game rules — living reference
 
+> **Stacking rules are now authoritative from DDOBuilder's `BonusTypes.xml`** (Stacking =
+> "Always"/"Highest Only"), imported to [data/bonustypes.json](data/bonustypes.json) by
+> `tools/DdoDataImporter` and embedded + loaded by [BonusTypes.cs](src/DdoGearScanner.Vision/BonusTypes.cs).
+> The hand-crawled list below was WRONG (it stacked Artifact/Primal/Circumstance/Feat/Epic, which are
+> Highest Only, and missed Destiny/Unique/Penalty/Weapon DR/Armor&Shield Enhancement). Per DDOBuilder
+> the only self-stacking types are: **Armor Enhancement, Destiny, Mythic, Penalty, Reaper, Shield
+> Enhancement, Stacking, Unique, Untyped, Weapon DR.** Treat the prose below as background only.
+
 Game facts that the scanner and the sibling web planner depend on. The first topic is **bonus
 types**, because the planner's stacking math is built entirely on them and the scanner has to
 capture the bonus type off every mod (see [TOOLTIP_FORMAT.md](TOOLTIP_FORMAT.md) and

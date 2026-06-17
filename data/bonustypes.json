@@ -1,0 +1,290 @@
+[
+  {
+    "Name": "Action Boost",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Alchemical",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Armor",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Armor Enhancement",
+    "Stacking": "Always"
+  },
+  {
+    "Name": "Artifact",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Base",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Centered",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Circumstance",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Class",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Combat Style",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Competence",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Deflection",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Destiny",
+    "Stacking": "Always"
+  },
+  {
+    "Name": "Determination",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Divine",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Elemental Energy",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Elemental Spell Power",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Enchantment",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Enhancement",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Epic",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Equipment",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Eternal Faith",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Exceptional",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "False Life",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Feat",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Festive",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Fortune",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Greater Elemental Energy",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Greater Elemental Spell Power",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Guild",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Implement",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Improved Elemental Energy",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Improved Elemental Spell Power",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Inherent",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Insightful",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Inspiration",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Keen",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Legendary",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Legendary Elemental Energy",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Legendary Elemental Spell Power",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Level Up",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Luck",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Morale",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Music",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Mythic",
+    "Stacking": "Always"
+  },
+  {
+    "Name": "Natural Armor",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Not Set",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Orb",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Penalty",
+    "Stacking": "Always"
+  },
+  {
+    "Name": "Pirate",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Primal",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Profane",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Psionic",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Quality",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Racial",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Rage",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Reaper",
+    "Stacking": "Always"
+  },
+  {
+    "Name": "Resistance",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Sacred",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Shield",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Shield Enhancement",
+    "Stacking": "Always"
+  },
+  {
+    "Name": "Silver Flame",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Size",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Special",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Spooky",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Stacking",
+    "Stacking": "Always"
+  },
+  {
+    "Name": "Unique",
+    "Stacking": "Always"
+  },
+  {
+    "Name": "Universal",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Untyped",
+    "Stacking": "Always"
+  },
+  {
+    "Name": "Vitality",
+    "Stacking": "Highest Only"
+  },
+  {
+    "Name": "Weapon DR",
+    "Stacking": "Always"
+  },
+  {
+    "Name": "Weapon Enchantment",
+    "Stacking": "Highest Only"
+  }
+]

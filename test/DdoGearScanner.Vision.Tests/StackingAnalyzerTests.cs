@@ -46,13 +46,27 @@ public class StackingAnalyzerTests
     [Fact]
     public void SelfStackingTypeAddsEveryInstance()
     {
+        // Reaper is a genuine self-stacking type per DDOBuilder's bonustypes.json (Stacking="Always").
         StackingMatrix m = Analyze(
-            (EquipSlot.Cloak, Item(EquipSlot.Cloak, new Mod("Melee Power", 5, "Artifact"))),
-            (EquipSlot.Belt, Item(EquipSlot.Belt, new Mod("Melee Power", 5, "Artifact"))));
+            (EquipSlot.Cloak, Item(EquipSlot.Cloak, new Mod("Melee Power", 5, "Reaper"))),
+            (EquipSlot.Belt, Item(EquipSlot.Belt, new Mod("Melee Power", 5, "Reaper"))));
 
         MatrixRow mp = Assert.Single(m.Rows);
-        Assert.False(mp.HasOverride);                                      // artifact stacks with itself
+        Assert.False(mp.HasOverride);                                      // reaper stacks with itself
         Assert.Equal(10, mp.Effective);
+    }
+
+    [Fact]
+    public void ArtifactIsHighestOnlyNotSelfStacking()
+    {
+        // Regression: the old hand-rolled list wrongly stacked Artifact. DDOBuilder says Highest Only.
+        StackingMatrix m = Analyze(
+            (EquipSlot.Cloak, Item(EquipSlot.Cloak, new Mod("Melee Power", 5, "Artifact"))),
+            (EquipSlot.Belt, Item(EquipSlot.Belt, new Mod("Melee Power", 8, "Artifact"))));
+
+        MatrixRow mp = Assert.Single(m.Rows);
+        Assert.True(mp.HasOverride);                                       // only the higher counts
+        Assert.Equal(8, mp.Effective);
     }
 
     [Fact]

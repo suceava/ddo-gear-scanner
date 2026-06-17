@@ -19,3 +19,6 @@ publish/
 ## OS
 Thumbs.db
 desktop.ini
+
+# DDOBuilder data import cache (sparse clone)
+tools/DdoDataImporter/.cache/

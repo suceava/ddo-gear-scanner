@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DdoGearScanner.DataImport</RootNamespace>
+    <AssemblyName>DdoDataImporter</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reuse the real EquipSlot enum so the catalog speaks the app's slot vocabulary. -->
+    <ProjectReference Include="..\..\src\DdoGearScanner.Model\DdoGearScanner.Model.csproj" />
+  </ItemGroup>
+
+</Project>
