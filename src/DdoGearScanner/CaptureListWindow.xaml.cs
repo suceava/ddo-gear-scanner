@@ -154,7 +154,9 @@ public partial class CaptureListWindow : Window
 
         LastName.Text = string.IsNullOrWhiteSpace(item.Name) ? "(no name read)" : item.Name;
         LastMeta.Text = $"ML {item.MinimumLevel?.ToString() ?? "?"}  ·  {item.Slot}  ·  {item.ItemTypeText ?? "type ?"}";
-        LastReadInfo.Text = (item.IsLikelyNamed ? "likely NAMED" : "random/crafted")
+        string origin = item.Matched ? "✦ matched · DDOBuilder catalog"
+                                     : (item.IsLikelyNamed ? "likely NAMED" : "random/crafted");
+        LastReadInfo.Text = origin
                             + $"  ·  {item.Mods.Count} mods  ·  {item.CapturedUtc.ToLocalTime():HH:mm:ss}";
         ModsList.ItemsSource = item.Mods;
         AugList.ItemsSource = item.Augments;

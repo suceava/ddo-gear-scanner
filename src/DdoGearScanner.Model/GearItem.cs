@@ -86,7 +86,10 @@ public sealed record GearItem(
     // User-driven: Locked items are never overwritten by a re-capture (the user toggles this; it is
     // never set automatically). Edited marks an item that was hand-corrected in the item editor.
     bool Locked = false,
-    bool Edited = false)
+    bool Edited = false,
+    // Set when a capture's name matched a DDOBuilder catalog item with high confidence and its mods
+    // were replaced with the catalog's clean data (RawOcrText is still kept).
+    bool Matched = false)
 {
     public static GearItem Empty(string rawOcrText) => new(
         Name: string.Empty,

@@ -36,9 +36,9 @@ public sealed class SlotRow : INotifyPropertyChanged
         : $"ML {_item.MinimumLevel?.ToString() ?? "?"}  ·  {_item.Mods.Count} mods"
           + (_item.SetBonuses.Count > 0 ? "  ·  set" : "");
 
-    /// <summary>Tiny status glyphs: 🔒 = locked (re-capture skips it), ✎ = hand-edited.</summary>
+    /// <summary>Tiny status glyphs: 🔒 = locked (re-capture skips it), ✦ = catalog-matched, ✎ = hand-edited.</summary>
     public string Badge => _item is null ? ""
-        : (_item.Locked ? "🔒 " : "") + (_item.Edited ? "✎" : "");
+        : (_item.Locked ? "🔒 " : "") + (_item.Matched ? "✦ " : "") + (_item.Edited ? "✎" : "");
 
     public event PropertyChangedEventHandler? PropertyChanged;
 }
