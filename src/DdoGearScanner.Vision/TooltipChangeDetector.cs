@@ -11,8 +11,10 @@ namespace DdoGearScanner.Vision;
 /// capture of the revealed inventory). The cursor only DISAMBIGUATES which changed block is the
 /// tooltip; the full extent is captured. Border/quality independent — works for normals too.
 ///
-/// The baseline self-maintains: it refreshes whenever nothing is showing (tracking slow scene/UI
-/// drift) and re-bases on a big whole-frame change (camera move/shake), so it doesn't go stale.
+/// The baseline self-maintains as a running background model (<see cref="UpdateBaseline"/>): only
+/// UNCHANGED pixels track the live frame, while the changed region (a tooltip) is left as clean
+/// background — so a tooltip is never baked in and the area under it still matches once it vanishes. A
+/// big whole-frame change (camera) hard-rebases; a lingering phantom hard-rebases after StuckLimit frames.
 ///
 /// Stateful: call <see cref="OnFrame"/> per frame; returns a full-frame Rect once per tooltip, when
 /// it has been stable under a settled cursor. <see cref="Reset"/> when starting a session.
@@ -25,7 +27,9 @@ public sealed class TooltipChangeDetector
     private const int MoveGate = 10;           // px/frame above which the cursor is "moving" — ignore
     private const int MinMoveDist = 35;        // px the cursor must move (new piece) before re-capturing
     private const double BigChangeFraction = 0.40; // whole-frame change this large → re-baseline (camera moved)
-    private const double QuietFraction = 0.012;    // change below this → no tooltip; refresh the baseline
+    private const double QuietFraction = 0.012;    // change below this → no tooltip showing
+    private const int StuckLimit = 30;             // frames of persistent change with no valid tooltip
+                                                   // blob → hard-rebaseline (heals a baked-in phantom)
 
     private readonly int _maxCursorDist;
     private readonly int _minW, _minH, _maxW, _maxH;
@@ -38,6 +42,7 @@ public sealed class TooltipChangeDetector
     private Point _prevCursor;
     private bool _havePrevCursor;
     private int _prevTotalChanged;   // last frame's change count, to tell when a tooltip stops drawing
+    private int _noBlobFrames;       // consecutive frames of change with no valid tooltip blob (phantom)
 
     public string LastChangeInfo { get; private set; } = "";
 
@@ -57,7 +62,7 @@ public sealed class TooltipChangeDetector
         _stable = 0; _candidate = default;
         _hasCaptured = false; _capturedCursor = default;
         _havePrevCursor = false; _prevCursor = default;
-        _prevTotalChanged = 0;
+        _prevTotalChanged = 0; _noBlobFrames = 0;
     }
 
     public Rect? OnFrame(OpenCvMat frameBgrOrBgra, Point cursorInFrame)
@@ -92,7 +97,7 @@ public sealed class TooltipChangeDetector
         int changeDelta = Math.Abs(totalChanged - _prevTotalChanged);
         _prevTotalChanged = totalChanged;
 
-        // Camera moved / scene jumped → baseline is stale, re-base and bail.
+        // Camera moved / scene jumped → the whole baseline is meaningless; hard re-base and bail.
         if (totalChanged > frameArea * BigChangeFraction)
         {
             _baseline.Dispose(); _baseline = small.Clone();
@@ -101,17 +106,25 @@ public sealed class TooltipChangeDetector
             return null;
         }
 
-        // Cursor moving between pieces → ignore (and don't touch the baseline).
+        // Maintain the background model WITHOUT ever baking the tooltip in, and keeping the tooltip
+        // region as CLEAN background so that when the tooltip vanishes the revealed area matches the
+        // baseline (no diff → no false capture of the inventory underneath). Only UNCHANGED pixels are
+        // copied from the current frame (tracking slow scene/UI drift); changed pixels — the tooltip —
+        // are left untouched. The old code wholesale-cloned the frame on refresh, which baked tooltips
+        // into the background; an earlier leak-blend did the opposite, corrupting the tooltip region so
+        // the revealed inventory then false-fired.
+        UpdateBaseline(small, changed);
+
+        // Cursor moving between pieces → ignore (don't try to settle on a smearing tooltip).
         double moved = _havePrevCursor ? DistToPoint(_prevCursor, cursorInFrame) : 0;
         _prevCursor = cursorInFrame; _havePrevCursor = true;
         if (moved > MoveGate) { _stable = 0; _candidate = default; LastChangeInfo = $"moving({(int)moved})"; return null; }
 
-        // Nothing showing → refresh the baseline (tracks slow drift) and wait.
+        // Nothing showing → no tooltip to settle on (the background model already tracked this frame).
         if (totalChanged < frameArea * QuietFraction)
         {
-            _baseline.Dispose(); _baseline = small.Clone();
-            _stable = 0; _candidate = default;
-            LastChangeInfo = $"quiet({totalChanged}) baseline refreshed";
+            _stable = 0; _candidate = default; _noBlobFrames = 0;
+            LastChangeInfo = $"quiet({totalChanged})";
             return null;
         }
 
@@ -120,9 +133,20 @@ public sealed class TooltipChangeDetector
         if (near is not Rect r)
         {
             _stable = 0; _candidate = default;
+            // Persistent change with no tooltip-shaped blob near the cursor is a phantom (e.g. the
+            // baseline was cloned while a tooltip was up during a camera move / at session start). Heal
+            // it by hard-rebaselining after it lingers — this never fires while a real tooltip is found.
+            if (++_noBlobFrames > StuckLimit)
+            {
+                _baseline.Dispose(); _baseline = small.Clone();
+                _stable = 0; _candidate = default; _noBlobFrames = 0;
+                LastChangeInfo = $"stuck → rebaseline({totalChanged})";
+                return null;
+            }
             LastChangeInfo = $"change({totalChanged}) {dbg}";
             return null;
         }
+        _noBlobFrames = 0;
 
         _candidate = r;
         // Only count it as "settled" once the tooltip has stopped changing (finished drawing in).
@@ -140,6 +164,18 @@ public sealed class TooltipChangeDetector
             if (result.Width >= _minW && result.Height >= _minH) return result;
         }
         return null;
+    }
+
+    /// <summary>Background update: copy only the UNCHANGED pixels from the current frame into the
+    /// baseline. This tracks slow scene/UI drift while deliberately leaving the changed region (the
+    /// tooltip) as clean background, so the tooltip is never baked in AND the area it covers still
+    /// matches the baseline once it vanishes (no false capture of the revealed inventory).</summary>
+    private void UpdateBaseline(OpenCvMat small, OpenCvMat changed)
+    {
+        if (_baseline is null) return;
+        using OpenCvMat unchanged = new();
+        Cv2.BitwiseNot(changed, unchanged);
+        small.CopyTo(_baseline, unchanged);
     }
 
     private Rect? NearestTooltipBlob(OpenCvMat changedScaled, Point cursorFull, out string dbg)
