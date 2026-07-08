@@ -16,9 +16,28 @@ publish/
 .idea/
 .vscode/
 
-## OS
+## OS — Windows
 Thumbs.db
 desktop.ini
+
+## OS — macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon
+.DocumentRevisions-V100
+.fseventsd
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
 
 # DDOBuilder data import cache (sparse clone)
 tools/DdoDataImporter/.cache/
