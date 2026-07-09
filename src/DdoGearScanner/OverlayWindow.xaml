@@ -13,6 +13,16 @@
         Left="-32000" Top="-32000" Width="1" Height="1">
     <Grid IsHitTestVisible="False">
         <Canvas x:Name="HighlightCanvas">
+            <!-- Debug: persistent borders showing the calibrated run-tracker regions -->
+            <Rectangle x:Name="DebugPopupBorder" Visibility="Collapsed" Stroke="#E6C66A" StrokeThickness="3" RadiusX="3" RadiusY="3" />
+            <TextBlock x:Name="DebugPopupLabel" Visibility="Collapsed" Foreground="#E6C66A" FontFamily="Segoe UI"
+                       FontWeight="Bold" FontSize="13" Text="① Quest-entry dialog" />
+            <Rectangle x:Name="DebugTrackerBorder" Visibility="Collapsed" Stroke="#6AC6E6" StrokeThickness="3" RadiusX="3" RadiusY="3" />
+            <TextBlock x:Name="DebugTrackerLabel" Visibility="Collapsed" Foreground="#6AC6E6" FontFamily="Segoe UI"
+                       FontWeight="Bold" FontSize="13" Text="② Quest tracker" />
+            <Rectangle x:Name="DebugChatBorder" Visibility="Collapsed" Stroke="#7AD67A" StrokeThickness="3" RadiusX="3" RadiusY="3" />
+            <TextBlock x:Name="DebugChatLabel" Visibility="Collapsed" Foreground="#7AD67A" FontFamily="Segoe UI"
+                       FontWeight="Bold" FontSize="13" Text="③ Chat log" />
             <Rectangle x:Name="RegionHighlight"
                        Visibility="Collapsed"
                        Stroke="#FFE0A030"

@@ -34,6 +34,13 @@ public partial class CaptureListWindow : Window
     /// <summary>Raised when the user clicks the Calibrate slots button.</summary>
     public event Action? CalibrateRequested;
 
+    /// <summary>Raised when the user opens the run tracker window.</summary>
+    public event Action? RunTrackerRequested;
+
+    /// <summary>Raised when the user opens the run-region calibration window.</summary>
+    public event Action? RunCalibrateRequested;
+
+
     private bool _bindingHotkey;
 
     public CaptureListWindow(CaptureStore store, CharacterStore charStore, AppSettings settings, bool ocrAvailable)
@@ -245,6 +252,25 @@ public partial class CaptureListWindow : Window
         _matrixWindow = new MatrixWindow(matrix) { Owner = this };
         _matrixWindow.Closed += (_, _) => _matrixWindow = null;
         _matrixWindow.Show();
+    }
+
+    private void RunTracker_Click(object sender, RoutedEventArgs e) => RunTrackerRequested?.Invoke();
+
+    private void CalibrateRun_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+        RunCalibrateRequested?.Invoke();
+    }
+
+    private DebugSettingsWindow? _debugWindow;
+
+    private void DebugSettings_Click(object sender, RoutedEventArgs e)
+    {
+        MenuPopup.IsOpen = false;
+        if (_debugWindow is not null) { _debugWindow.Activate(); return; }
+        _debugWindow = new DebugSettingsWindow { Owner = this };
+        _debugWindow.Closed += (_, _) => _debugWindow = null;
+        _debugWindow.Show();
     }
 
     // ---- item editing ----

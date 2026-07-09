@@ -71,6 +71,70 @@ public sealed class AppSettings : INotifyPropertyChanged
     private bool _matrixMaximized;
     public bool MatrixMaximized { get => _matrixMaximized; set => Set(ref _matrixMaximized, value); }
 
+    // Run-tracker window bounds (NaN => center on first open).
+    private double _runLeft = double.NaN;
+    public double RunLeft { get => _runLeft; set => Set(ref _runLeft, value); }
+    private double _runTop = double.NaN;
+    public double RunTop { get => _runTop; set => Set(ref _runTop, value); }
+    private double _runWidth = double.NaN;
+    public double RunWidth { get => _runWidth; set => Set(ref _runWidth, value); }
+    private double _runHeight = double.NaN;
+    public double RunHeight { get => _runHeight; set => Set(ref _runHeight, value); }
+    private bool _runMaximized;
+    public bool RunMaximized { get => _runMaximized; set => Set(ref _runMaximized, value); }
+
+    // Whether the dungeon-run tracker is watching the capture stream.
+    private bool _runTrackingEnabled = true;
+    public bool RunTrackingEnabled { get => _runTrackingEnabled; set => Set(ref _runTrackingEnabled, value); }
+
+    // ---- Debug ----
+    // Master switch. When off, every debug feature below is inert regardless of its own flag.
+    private bool _debugMode;
+    public bool DebugMode { get => _debugMode; set => Set(ref _debugMode, value); }
+
+    // Draw the calibrated run-tracker region borders on the game overlay.
+    private bool _runDebugOverlay;
+    public bool RunDebugOverlay { get => _runDebugOverlay; set => Set(ref _runDebugOverlay, value); }
+
+    // Show a live panel of the OCR'd chat text (with newly-detected lines highlighted).
+    private bool _debugShowChatText;
+    public bool DebugShowChatText { get => _debugShowChatText; set => Set(ref _debugShowChatText, value); }
+
+    // Debug Diagnostics window bounds (NaN => center on first open).
+    private double _debugLeft = double.NaN;
+    public double DebugLeft { get => _debugLeft; set => Set(ref _debugLeft, value); }
+    private double _debugTop = double.NaN;
+    public double DebugTop { get => _debugTop; set => Set(ref _debugTop, value); }
+    private double _debugWidth = double.NaN;
+    public double DebugWidth { get => _debugWidth; set => Set(ref _debugWidth, value); }
+    private double _debugHeight = double.NaN;
+    public double DebugHeight { get => _debugHeight; set => Set(ref _debugHeight, value); }
+    private bool _debugMaximized;
+    public bool DebugMaximized { get => _debugMaximized; set => Set(ref _debugMaximized, value); }
+
+    // OCR regions for run tracking, as fractions of the game window (x0,y0,x1,y1). Defaults: the
+    // quest-tracker box (top-right) and the end-of-quest reward panel (center). Exposed here so they can
+    // be field-tuned against real captures without a rebuild.
+    private double _trackerX0 = 0.76, _trackerY0 = 0.10, _trackerX1 = 1.00, _trackerY1 = 0.46;
+    public double TrackerX0 { get => _trackerX0; set => Set(ref _trackerX0, value); }
+    public double TrackerY0 { get => _trackerY0; set => Set(ref _trackerY0, value); }
+    public double TrackerX1 { get => _trackerX1; set => Set(ref _trackerX1, value); }
+    public double TrackerY1 { get => _trackerY1; set => Set(ref _trackerY1, value); }
+
+    private double _completionX0 = 0.18, _completionY0 = 0.16, _completionX1 = 0.82, _completionY1 = 0.84;
+    public double CompletionX0 { get => _completionX0; set => Set(ref _completionX0, value); }
+    public double CompletionY0 { get => _completionY0; set => Set(ref _completionY0, value); }
+    public double CompletionX1 { get => _completionX1; set => Set(ref _completionX1, value); }
+    public double CompletionY1 { get => _completionY1; set => Set(ref _completionY1, value); }
+
+    // Chat-log region — watched for "Adventure Completed" (and XP). Default = bottom-left; calibrate to
+    // the BOTTOM few lines of your chat so only recent messages are read.
+    private double _chatX0 = 0.0, _chatY0 = 0.74, _chatX1 = 0.34, _chatY1 = 0.99;
+    public double ChatX0 { get => _chatX0; set => Set(ref _chatX0, value); }
+    public double ChatY0 { get => _chatY0; set => Set(ref _chatY0, value); }
+    public double ChatX1 { get => _chatX1; set => Set(ref _chatX1, value); }
+    public double ChatY1 { get => _chatY1; set => Set(ref _chatY1, value); }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -104,6 +168,32 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.MatrixWidth = loaded.MatrixWidth;
                     s.MatrixHeight = loaded.MatrixHeight;
                     s.MatrixMaximized = loaded.MatrixMaximized;
+                    s.RunLeft = loaded.RunLeft;
+                    s.RunTop = loaded.RunTop;
+                    s.RunWidth = loaded.RunWidth;
+                    s.RunHeight = loaded.RunHeight;
+                    s.RunMaximized = loaded.RunMaximized;
+                    s.RunTrackingEnabled = loaded.RunTrackingEnabled;
+                    s.DebugMode = loaded.DebugMode;
+                    s.RunDebugOverlay = loaded.RunDebugOverlay;
+                    s.DebugShowChatText = loaded.DebugShowChatText;
+                    s.DebugLeft = loaded.DebugLeft;
+                    s.DebugTop = loaded.DebugTop;
+                    s.DebugWidth = loaded.DebugWidth;
+                    s.DebugHeight = loaded.DebugHeight;
+                    s.DebugMaximized = loaded.DebugMaximized;
+                    s.TrackerX0 = loaded.TrackerX0;
+                    s.TrackerY0 = loaded.TrackerY0;
+                    s.TrackerX1 = loaded.TrackerX1;
+                    s.TrackerY1 = loaded.TrackerY1;
+                    s.CompletionX0 = loaded.CompletionX0;
+                    s.CompletionY0 = loaded.CompletionY0;
+                    s.CompletionX1 = loaded.CompletionX1;
+                    s.CompletionY1 = loaded.CompletionY1;
+                    s.ChatX0 = loaded.ChatX0;
+                    s.ChatY0 = loaded.ChatY0;
+                    s.ChatX1 = loaded.ChatX1;
+                    s.ChatY1 = loaded.ChatY1;
                 }
             }
         }

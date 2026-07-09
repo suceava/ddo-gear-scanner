@@ -77,10 +77,15 @@
                                 Content="Set Detection Hotkey (Insert)" Click="SetHotkey_Click" />
                         <Button x:Name="CalibrateButton" Style="{StaticResource MenuItemButton}"
                                 Content="Calibrate Slots" Click="Calibrate_Click" />
+                        <Button x:Name="CalibrateRunButton" Style="{StaticResource MenuItemButton}"
+                                Content="Calibrate Run Regions" Click="CalibrateRun_Click" />
+                        <Button x:Name="DebugSettingsButton" Style="{StaticResource MenuItemButton}"
+                                Content="Debug Settings…" Click="DebugSettings_Click" />
                     </StackPanel>
                 </Border>
             </Popup>
             <Button x:Name="MatrixButton" Content="Stacking matrix" Click="Matrix_Click" />
+            <Button x:Name="RunTrackerButton" Content="Run tracker" Click="RunTracker_Click" />
         </StackPanel>
 
         <!-- Modal prompt shown while waiting for a hotkey keypress -->

@@ -15,6 +15,8 @@ public partial class App : Application
     private CaptureCoordinator? _coordinator;
     private FrameGrabber? _grabber;
     private HotkeyTrigger? _trigger;
+    private RunTrackerWindow? _runWindow;
+    private DebugDiagnosticsWindow? _diagWindow;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -39,6 +41,25 @@ public partial class App : Application
         CapturePipeline pipeline = new(_tracker, reader, store);
         _coordinator.FrameArrived += pipeline.OnFrame; // drives the detection session
 
+        // Run tracker: a SECOND subscriber to the same capture stream, independent of the gear pipeline.
+        // Watches the quest-tracker + reward-panel regions and logs dungeon runs (name/difficulty/level/
+        // time/XP) to runs.json. Region ratios come from settings so they can be field-tuned.
+        RunStore runStore = RunStore.Load();
+        // Dedicated OCR engine for the run tracker: it OCRs continuously and could otherwise overlap the
+        // gear pipeline's OCR on a shared engine (Windows OCR gives no concurrency guarantee).
+        LocalOcr runOcr = new();
+        EntryPopupReader entryReader = new(runOcr);
+        QuestTrackerReader trackerReader = new(runOcr);
+        ChatLogReader chatReader = new(runOcr);
+        RunTrackerPipeline runPipeline = new(
+            entryReader, trackerReader, chatReader, runStore,
+            () => (charStore.Active.Id, charStore.Active.Level),
+            new RegionRatios(settings.TrackerX0, settings.TrackerY0, settings.TrackerX1, settings.TrackerY1),
+            new RegionRatios(settings.CompletionX0, settings.CompletionY0, settings.CompletionX1, settings.CompletionY1),
+            new RegionRatios(settings.ChatX0, settings.ChatY0, settings.ChatX1, settings.ChatY1));
+        runPipeline.SetEnabled(settings.RunTrackingEnabled);
+        _coordinator.FrameArrived += runPipeline.OnFrame;
+
         // Inventory slot detection (rag-doll anchor + calibrated slot offsets). Template is embedded.
         InventoryLocator? invLocator = InventoryLocator.TryLoadEmbedded();
         SlotMap slotMap = SlotMap.Load();
@@ -53,6 +74,51 @@ public partial class App : Application
         CaptureListWindow main = new(store, charStore, settings, reader.IsAvailable);
         main.DetectionToggleRequested += () => pipeline.ToggleSession();
         main.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
+        main.RunTrackerRequested += () =>
+        {
+            if (_runWindow is not null) { _runWindow.Activate(); return; }
+            _runWindow = new RunTrackerWindow(runStore, charStore, runPipeline, settings) { Owner = main };
+            _runWindow.Closed += (_, _) => _runWindow = null;
+            _runWindow.Show();
+        };
+
+        // Spatial debug (region borders) lives on the game overlay and reacts to settings on its own.
+        // DATA debug (live chat OCR) lives in a separate movable Debug Diagnostics window, opened/closed
+        // to follow the data-debug toggles so the game view stays uncluttered.
+        void ApplyDiagWindow()
+        {
+            bool want = settings.DebugMode && settings.DebugShowChatText;
+            if (want)
+            {
+                if (_diagWindow is null)
+                {
+                    _diagWindow = new DebugDiagnosticsWindow { Owner = main };
+                    runPipeline.ChatDebug += _diagWindow.SetChatDebug;
+                    _diagWindow.Closed += (_, _) =>
+                    {
+                        if (_diagWindow is not null) runPipeline.ChatDebug -= _diagWindow.SetChatDebug;
+                        _diagWindow = null;
+                    };
+                    _diagWindow.Show();
+                }
+                else _diagWindow.Activate();
+            }
+            else _diagWindow?.Close();
+        }
+        settings.PropertyChanged += (_, _) => Dispatcher.Invoke(ApplyDiagWindow);
+        ApplyDiagWindow();
+
+        main.RunCalibrateRequested += () =>
+        {
+            using OpenCvSharp.Mat? frame = _grabber.GrabLatest();
+            if (frame is null)
+            {
+                main.SetStatusText("No game frame captured yet — make sure DDO is running (windowed) and try again.");
+                return;
+            }
+            var cal = new RunCalibrationWindow(frame, settings, runPipeline.SetRegions) { Owner = main };
+            cal.ShowDialog();   // saved regions land in AppSettings → overlay borders refit automatically
+        };
         calibration.Status += s => { main.SetStatusText(s); overlay.ShowToast(s, true, sticky: true); };
         main.Show();
 

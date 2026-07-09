@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using DdoGearScanner.Capture;
 
@@ -40,6 +41,10 @@ public partial class OverlayWindow : Window
         IntPtr hwnd = new WindowInteropHelper(this).Handle;
         long ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, (IntPtr)(ex | WS_EX_TRANSPARENT | WS_EX_LAYERED));
+
+        // React to debug-setting changes without any explicit wiring (pg-loot pattern).
+        AppSettings.Instance.PropertyChanged += (_, _) => Dispatcher.Invoke(ApplyDebug);
+        ApplyDebug();
     }
 
     public void AttachTracker(GameWindowTracker tracker)
@@ -58,8 +63,37 @@ public partial class OverlayWindow : Window
             Width = Math.Max(1, rect.Width / dpi.DpiScaleX);
             Height = Math.Max(1, rect.Height / dpi.DpiScaleY);
             Visibility = Visibility.Visible;
+            ApplyDebug();   // the borders are ratio-based; refit when the window moves/resizes
         });
     }
+
+    // --- Debug overlays, driven straight off AppSettings (react to changes, like pg-loot's overlay) ---
+
+    /// <summary>Re-read the debug settings and show/position the region borders + chat panel accordingly.
+    /// Called on any settings change and when the game window moves.</summary>
+    private void ApplyDebug()
+    {
+        AppSettings s = AppSettings.Instance;
+        bool borders = s.DebugMode && s.RunDebugOverlay;
+        Place(DebugPopupBorder, DebugPopupLabel, s.CompletionX0, s.CompletionY0, s.CompletionX1, s.CompletionY1, borders);
+        Place(DebugTrackerBorder, DebugTrackerLabel, s.TrackerX0, s.TrackerY0, s.TrackerX1, s.TrackerY1, borders);
+        Place(DebugChatBorder, DebugChatLabel, s.ChatX0, s.ChatY0, s.ChatX1, s.ChatY1, borders);
+    }
+
+    private void Place(Rectangle border, TextBlock label, double x0, double y0, double x1, double y1, bool show)
+    {
+        Visibility v = show ? Visibility.Visible : Visibility.Collapsed;
+        border.Visibility = v;
+        label.Visibility = v;
+        if (!show) return;
+        double x = x0 * ActualWidth, y = y0 * ActualHeight;
+        Canvas.SetLeft(border, x); Canvas.SetTop(border, y);
+        border.Width = Math.Max(0, (x1 - x0) * ActualWidth);
+        border.Height = Math.Max(0, (y1 - y0) * ActualHeight);
+        Canvas.SetLeft(label, x + 3);
+        Canvas.SetTop(label, Math.Max(0, y - 20));
+    }
+
 
     private void OnGameWindowLost() => Dispatcher.Invoke(() => Visibility = Visibility.Collapsed);
 

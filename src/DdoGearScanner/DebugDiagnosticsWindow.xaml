@@ -1,0 +1,32 @@
+<Window x:Class="DdoGearScanner.DebugDiagnosticsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Debug Diagnostics" Width="720" Height="520" MinWidth="360" MinHeight="240"
+        WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/appicon.ico"
+        Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}"
+        TextOptions.TextFormattingMode="Display">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="{StaticResource BgPanel}" Padding="16,10"
+                BorderBrush="{StaticResource BorderGold}" BorderThickness="0,0,0,1">
+            <TextBlock Text="Debug Diagnostics" FontSize="16" Style="{StaticResource Title}" />
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="14,12">
+            <StackPanel>
+                <!-- ==== Chat OCR ==== -->
+                <Border x:Name="ChatSection" Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderDim}"
+                        BorderThickness="1" CornerRadius="4" Padding="12,10">
+                    <StackPanel>
+                        <TextBlock Text="Chat OCR  ·  green = newly-detected line" Style="{StaticResource Section}" Margin="0,0,0,6" />
+                        <StackPanel x:Name="ChatDebugList" />
+                        <TextBlock x:Name="ChatEmpty" Text="(waiting for chat OCR — enter a quest, or make sure the chat box is calibrated)"
+                                   Foreground="{StaticResource TextMuted}" FontSize="11.5" />
+                    </StackPanel>
+                </Border>
+
+                <!-- future diagnostic sections go here, each shown per its own debug toggle -->
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

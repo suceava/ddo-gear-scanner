@@ -1,0 +1,73 @@
+<Window x:Class="DdoGearScanner.RunCalibrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Calibrate Run Regions" Width="1560" Height="1040"
+        WindowStartupLocation="CenterScreen"
+        Icon="pack://application:,,,/appicon.ico"
+        Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}"
+        TextOptions.TextFormattingMode="Display">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="{StaticResource BgPanel}" Padding="18,12"
+                BorderBrush="{StaticResource BorderGold}" BorderThickness="0,0,0,1">
+            <StackPanel>
+                <TextBlock Text="Calibrate Run Regions" FontSize="18" Style="{StaticResource Title}" />
+                <TextBlock Foreground="{StaticResource TextMuted}" Margin="0,3,0,0" FontSize="12.5" TextWrapping="Wrap"
+                           Text="The run tracker reads quest info straight off your screen, so it needs to know where these two panels sit on YOUR layout. Draw a box around each on the screenshot below — you only do this once." />
+
+                <!-- What each region is -->
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Grid.Column="0" Width="14" Height="14" CornerRadius="3" Margin="0,2,8,6"
+                            Background="#33E6C66A" BorderBrush="#E6C66A" BorderThickness="2" VerticalAlignment="Top" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="① Quest-entry dialog" Foreground="{StaticResource GoldBright}"
+                               FontWeight="SemiBold" Margin="0,0,10,6" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Foreground="{StaticResource Parchment}" TextWrapping="Wrap" Margin="0,0,0,6"
+                               Text="The popup you get when you click a quest entrance — quest name, Level, Select Difficulty, Enter/Cancel. This is where the name, level and difficulty are read." />
+
+                    <Border Grid.Row="1" Grid.Column="0" Width="14" Height="14" CornerRadius="3" Margin="0,2,8,6"
+                            Background="#336AC6E6" BorderBrush="#6AC6E6" BorderThickness="2" VerticalAlignment="Top" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="② Quest-tracker panel" Foreground="#8FD4EE"
+                               FontWeight="SemiBold" Margin="0,0,10,6" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Foreground="{StaticResource Parchment}" TextWrapping="Wrap" Margin="0,0,0,6"
+                               Text="Optional — your quest list. (Completion now comes from the chat log below.)" />
+
+                    <Border Grid.Row="2" Grid.Column="0" Width="14" Height="14" CornerRadius="3" Margin="0,2,8,0"
+                            Background="#337AD67A" BorderBrush="#7AD67A" BorderThickness="2" VerticalAlignment="Top" />
+                    <TextBlock Grid.Row="2" Grid.Column="1" Text="③ Chat log" Foreground="#9BE09B"
+                               FontWeight="SemiBold" Margin="0,0,10,0" />
+                    <TextBlock Grid.Row="2" Grid.Column="2" Foreground="{StaticResource Parchment}" TextWrapping="Wrap"
+                               Text="The bottom few lines of your chat. This is where &quot;Adventure Completed&quot; is detected — the reliable completion signal. Box the last ~4-6 lines." />
+                </Grid>
+
+                <!-- Controls -->
+                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                    <Button x:Name="PopupModeButton" Content="Draw ① dialog box" Click="PopupMode_Click" />
+                    <Button x:Name="TrackerModeButton" Content="Draw ② tracker box" Click="TrackerMode_Click" />
+                    <Button x:Name="ChatModeButton" Content="Draw ③ chat box" Click="ChatMode_Click" />
+                    <Border Width="1" Background="{StaticResource BorderDim}" Margin="8,2" />
+                    <Button Content="Save" Click="Save_Click" />
+                    <Button Content="Close" Click="Close_Click" />
+                </StackPanel>
+                <TextBlock x:Name="HintText" Margin="0,8,0,0" Foreground="{StaticResource GoldBright}" FontSize="12.5" />
+            </StackPanel>
+        </Border>
+
+        <Grid Background="{StaticResource BgWindow}">
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Margin="12">
+                <Image x:Name="FrameImage" Stretch="Fill" />
+                <Canvas x:Name="DrawCanvas" Background="#01000000" Cursor="Cross"
+                        MouseLeftButtonDown="Canvas_Down" MouseMove="Canvas_Move" MouseLeftButtonUp="Canvas_Up" />
+            </Grid>
+        </Grid>
+    </DockPanel>
+</Window>
