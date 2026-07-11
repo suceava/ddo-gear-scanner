@@ -1,0 +1,62 @@
+<UserControl x:Class="DdoGearScanner.HomeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}">
+    <UserControl.Resources>
+        <!-- Big feature tile: a flat gold-trimmed panel that lights up on hover. -->
+        <Style x:Key="Tile" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource BgPanel}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderGold}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Padding" Value="22,18" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource BgRaised}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource GoldBright}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <StackPanel MaxWidth="720" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="40">
+            <TextBlock Text="DDO Companion" FontSize="34" Style="{StaticResource Title}" HorizontalAlignment="Center" />
+            <TextBlock x:Name="CharacterLine" Foreground="{StaticResource TextMuted}" FontSize="13"
+                       HorizontalAlignment="Center" Margin="0,6,0,0" Text="" />
+
+            <UniformGrid Columns="2" Margin="0,28,0,0">
+                <Button Style="{StaticResource Tile}" Margin="0,0,8,0" Click="Gear_Click">
+                    <StackPanel>
+                        <TextBlock Text="Gear Loadout" FontSize="19" Style="{StaticResource Title}" />
+                        <TextBlock Text="Scan equipped gear tooltips into a per-character loadout sheet — mods, augments, set bonuses, and the stacking matrix."
+                                   Foreground="{StaticResource TextMuted}" FontSize="12.5" TextWrapping="Wrap" Margin="0,8,0,0" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource Tile}" Margin="8,0,0,0" Click="Run_Click">
+                    <StackPanel>
+                        <TextBlock Text="Run Tracker" FontSize="19" Style="{StaticResource Title}" />
+                        <TextBlock Text="Automatically log dungeon runs — quest, difficulty, level, time, and XP — with a live status card and an editable history."
+                                   Foreground="{StaticResource TextMuted}" FontSize="12.5" TextWrapping="Wrap" Margin="0,8,0,0" />
+                    </StackPanel>
+                </Button>
+            </UniformGrid>
+
+            <TextBlock Foreground="{StaticResource TextMuted}" FontSize="11.5" HorizontalAlignment="Center" Margin="0,26,0,0"
+                       TextWrapping="Wrap" TextAlignment="Center"
+                       Text="Make sure DDO is running in windowed or borderless mode. Use the nav rail on the left to switch features at any time." />
+        </StackPanel>
+    </Grid>
+</UserControl>

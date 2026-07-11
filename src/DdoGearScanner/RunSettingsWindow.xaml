@@ -1,0 +1,30 @@
+<Window x:Class="DdoGearScanner.RunSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Run Tracker Settings" Width="480" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/appicon.ico"
+        Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}"
+        TextOptions.TextFormattingMode="Display">
+    <Window.Resources>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource Parchment}" />
+            <Setter Property="Margin" Value="0,6,0,0" />
+        </Style>
+    </Window.Resources>
+    <StackPanel Margin="22,18,22,20">
+        <TextBlock Text="Run Tracker" FontSize="18" Style="{StaticResource Title}" />
+
+        <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
+                CornerRadius="4" Padding="14,10,14,14" Margin="0,14,0,0">
+            <StackPanel>
+                <CheckBox Content="Open the DDO wiki page automatically when a quest starts"
+                          IsChecked="{Binding AutoOpenWiki}" FontWeight="SemiBold" />
+                <TextBlock Text="As soon as a run begins, the quest's wiki page (with its map) opens in your browser."
+                           Foreground="{StaticResource TextMuted}" FontSize="11.5" TextWrapping="Wrap" Margin="22,3,0,0" />
+            </StackPanel>
+        </Border>
+
+        <Button Content="Close" Click="Close_Click" HorizontalAlignment="Right" Margin="0,18,0,0" />
+    </StackPanel>
+</Window>

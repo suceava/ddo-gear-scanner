@@ -18,23 +18,25 @@ namespace DdoGearScanner;
 public partial class RunCalibrationWindow : Window
 {
     private readonly AppSettings _settings;
-    private readonly Action<RegionRatios, RegionRatios, RegionRatios> _onApply;   // (tracker, popup, chat) → live-apply
+    private readonly Action<RegionRatios, RegionRatios, RegionRatios, RegionRatios> _onApply;   // (tracker, popup, chat, avatar) → live-apply
 
     private double _dispW, _dispH;
-    private enum Target { Popup, Tracker, Chat }
+    private enum Target { Popup, Tracker, Chat, Character }
     private Target _active = Target.Popup;
 
     private RegionRatios _popup;
     private RegionRatios _tracker;
     private RegionRatios _chat;
+    private RegionRatios _character;
 
     private readonly Rectangle _popupBox = new();
     private readonly Rectangle _trackerBox = new();
     private readonly Rectangle _chatBox = new();
+    private readonly Rectangle _charBox = new();
     private Point _dragStart;
     private bool _dragging;
 
-    public RunCalibrationWindow(OpenCvMat frame, AppSettings settings, Action<RegionRatios, RegionRatios, RegionRatios> onApply)
+    public RunCalibrationWindow(OpenCvMat frame, AppSettings settings, Action<RegionRatios, RegionRatios, RegionRatios, RegionRatios> onApply)
     {
         InitializeComponent();
         WindowChrome.UseDarkTitleBar(this);
@@ -54,13 +56,16 @@ public partial class RunCalibrationWindow : Window
         _popup = new RegionRatios(settings.CompletionX0, settings.CompletionY0, settings.CompletionX1, settings.CompletionY1);
         _tracker = new RegionRatios(settings.TrackerX0, settings.TrackerY0, settings.TrackerX1, settings.TrackerY1);
         _chat = new RegionRatios(settings.ChatX0, settings.ChatY0, settings.ChatX1, settings.ChatY1);
+        _character = new RegionRatios(settings.CharacterX0, settings.CharacterY0, settings.CharacterX1, settings.CharacterY1);
 
         StyleBox(_popupBox, Color.FromRgb(0xE6, 0xC6, 0x6A), "Popup");        // gold
         StyleBox(_trackerBox, Color.FromRgb(0x6A, 0xC6, 0xE6), "Quest tracker"); // cyan
         StyleBox(_chatBox, Color.FromRgb(0x7A, 0xD6, 0x7A), "Chat log");      // green
+        StyleBox(_charBox, Color.FromRgb(0xE0, 0x90, 0xD0), "Character");     // pink
         DrawCanvas.Children.Add(_popupBox);
         DrawCanvas.Children.Add(_trackerBox);
         DrawCanvas.Children.Add(_chatBox);
+        DrawCanvas.Children.Add(_charBox);
         RedrawBoxes();
         UpdateMode();
     }
@@ -89,6 +94,7 @@ public partial class RunCalibrationWindow : Window
         Place(_popupBox, _popup);
         Place(_trackerBox, _tracker);
         Place(_chatBox, _chat);
+        Place(_charBox, _character);
     }
 
     private void Place(Rectangle box, RegionRatios r)
@@ -102,6 +108,7 @@ public partial class RunCalibrationWindow : Window
     private void PopupMode_Click(object sender, RoutedEventArgs e) { _active = Target.Popup; UpdateMode(); }
     private void TrackerMode_Click(object sender, RoutedEventArgs e) { _active = Target.Tracker; UpdateMode(); }
     private void ChatMode_Click(object sender, RoutedEventArgs e) { _active = Target.Chat; UpdateMode(); }
+    private void CharMode_Click(object sender, RoutedEventArgs e) { _active = Target.Character; UpdateMode(); }
 
     private void UpdateMode()
     {
@@ -109,11 +116,13 @@ public partial class RunCalibrationWindow : Window
         {
             Target.Popup => "▶ Now drag a box around the QUEST-ENTRY DIALOG (gold), then Save.",
             Target.Tracker => "▶ Now drag a box around the TOP of the QUEST-TRACKER panel (cyan), then Save.",
+            Target.Character => "▶ Now drag a box around your AVATAR (pink) — name above the health bar + level under the portrait — then Save.",
             _ => "▶ Now drag a box around the BOTTOM few lines of your CHAT LOG (green) — where 'Adventure Completed' shows — then Save.",
         };
         PopupModeButton.FontWeight = _active == Target.Popup ? FontWeights.Bold : FontWeights.Normal;
         TrackerModeButton.FontWeight = _active == Target.Tracker ? FontWeights.Bold : FontWeights.Normal;
         ChatModeButton.FontWeight = _active == Target.Chat ? FontWeights.Bold : FontWeights.Normal;
+        CharModeButton.FontWeight = _active == Target.Character ? FontWeights.Bold : FontWeights.Normal;
     }
 
     private void Canvas_Down(object sender, MouseButtonEventArgs e)
@@ -147,6 +156,7 @@ public partial class RunCalibrationWindow : Window
         {
             case Target.Popup: _popup = r; break;
             case Target.Tracker: _tracker = r; break;
+            case Target.Character: _character = r; break;
             default: _chat = r; break;
         }
         RedrawBoxes();
@@ -172,7 +182,12 @@ public partial class RunCalibrationWindow : Window
             _settings.ChatX0 = _chat.X0; _settings.ChatY0 = _chat.Y0;
             _settings.ChatX1 = _chat.X1; _settings.ChatY1 = _chat.Y1;
         }
-        _onApply(_tracker, _popup, _chat);
+        if ((_character.X1 - _character.X0) > 0.02 && (_character.Y1 - _character.Y0) > 0.02)
+        {
+            _settings.CharacterX0 = _character.X0; _settings.CharacterY0 = _character.Y0;
+            _settings.CharacterX1 = _character.X1; _settings.CharacterY1 = _character.Y1;
+        }
+        _onApply(_tracker, _popup, _chat, _character);
         Close();
     }
 

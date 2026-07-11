@@ -34,9 +34,9 @@ public sealed class RunStore
         return store;
     }
 
-    /// <summary>Runs for one character, newest first.</summary>
-    public IEnumerable<RunRecord> ForCharacter(string? characterId)
-        => _runs.Where(r => r.CharacterId == characterId).OrderByDescending(r => r.EnteredUtc);
+    /// <summary>All runs, newest first (the run tracker shows every run — character is per-run now).</summary>
+    public IEnumerable<RunRecord> AllNewestFirst()
+        => _runs.OrderByDescending(r => r.EnteredUtc);
 
     public void Add(RunRecord run)
     {

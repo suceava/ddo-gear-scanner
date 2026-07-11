@@ -15,7 +15,6 @@ public partial class App : Application
     private CaptureCoordinator? _coordinator;
     private FrameGrabber? _grabber;
     private HotkeyTrigger? _trigger;
-    private RunTrackerWindow? _runWindow;
     private DebugDiagnosticsWindow? _diagWindow;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -51,12 +50,14 @@ public partial class App : Application
         EntryPopupReader entryReader = new(runOcr);
         QuestTrackerReader trackerReader = new(runOcr);
         ChatLogReader chatReader = new(runOcr);
+        CharacterReader characterReader = new(runOcr);
         RunTrackerPipeline runPipeline = new(
-            entryReader, trackerReader, chatReader, runStore,
+            entryReader, trackerReader, chatReader, characterReader, runStore,
             () => (charStore.Active.Id, charStore.Active.Level),
             new RegionRatios(settings.TrackerX0, settings.TrackerY0, settings.TrackerX1, settings.TrackerY1),
             new RegionRatios(settings.CompletionX0, settings.CompletionY0, settings.CompletionX1, settings.CompletionY1),
-            new RegionRatios(settings.ChatX0, settings.ChatY0, settings.ChatX1, settings.ChatY1));
+            new RegionRatios(settings.ChatX0, settings.ChatY0, settings.ChatX1, settings.ChatY1),
+            new RegionRatios(settings.CharacterX0, settings.CharacterY0, settings.CharacterX1, settings.CharacterY1));
         runPipeline.SetEnabled(settings.RunTrackingEnabled);
         _coordinator.FrameArrived += runPipeline.OnFrame;
 
@@ -71,16 +72,11 @@ public partial class App : Application
         overlay.Show();
         overlay.AttachTracker(_tracker);
 
-        CaptureListWindow main = new(store, charStore, settings, reader.IsAvailable);
-        main.DetectionToggleRequested += () => pipeline.ToggleSession();
-        main.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
-        main.RunTrackerRequested += () =>
-        {
-            if (_runWindow is not null) { _runWindow.Activate(); return; }
-            _runWindow = new RunTrackerWindow(runStore, charStore, runPipeline, settings) { Owner = main };
-            _runWindow.Closed += (_, _) => _runWindow = null;
-            _runWindow.Show();
-        };
+        // The "DDO Companion" shell hosts the Gear Loadout + Run Tracker pages; App routes the
+        // gear/run pipeline events to the embedded views via main.Gear / main.Run.
+        ShellWindow main = new(store, charStore, runStore, runPipeline, settings, reader.IsAvailable);
+        main.Gear.DetectionToggleRequested += () => pipeline.ToggleSession();
+        main.Gear.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
 
         // Spatial debug (region borders) lives on the game overlay and reacts to settings on its own.
         // DATA debug (live chat OCR) lives in a separate movable Debug Diagnostics window, opened/closed
@@ -106,29 +102,31 @@ public partial class App : Application
             else _diagWindow?.Close();
         }
         settings.PropertyChanged += (_, _) => Dispatcher.Invoke(ApplyDiagWindow);
-        ApplyDiagWindow();
+        // Initial ApplyDiagWindow() is deferred until after main.Show() below — it may set
+        // Owner = main, and WPF forbids that until the owner window has been shown.
 
-        main.RunCalibrateRequested += () =>
+        main.Run.RunCalibrateRequested += () =>
         {
             using OpenCvSharp.Mat? frame = _grabber.GrabLatest();
             if (frame is null)
             {
-                main.SetStatusText("No game frame captured yet — make sure DDO is running (windowed) and try again.");
+                main.Gear.SetStatusText("No game frame captured yet — make sure DDO is running (windowed) and try again.");
                 return;
             }
             var cal = new RunCalibrationWindow(frame, settings, runPipeline.SetRegions) { Owner = main };
             cal.ShowDialog();   // saved regions land in AppSettings → overlay borders refit automatically
         };
-        calibration.Status += s => { main.SetStatusText(s); overlay.ShowToast(s, true, sticky: true); };
+        calibration.Status += s => { main.Gear.SetStatusText(s); overlay.ShowToast(s, true, sticky: true); };
         main.Show();
+        ApplyDiagWindow();   // now that main is shown, the diag window may take Owner = main
 
         if (slotMap.IsDefault && reader.IsAvailable)
-            main.SetStatusText("Using the built-in 2560×1440 slot calibration. If slots don't detect, recalibrate via ☰ Menu → Calibrate Slots.");
+            main.Gear.SetStatusText("Using the built-in 2560×1440 slot calibration. If slots don't detect, recalibrate via ☰ Menu → Calibrate Slots.");
 
-        // Route pipeline results to both windows (marshaled to UI thread inside the handlers).
+        // Route pipeline results to the gear page + overlay (marshaled to UI thread inside the handlers).
         pipeline.Completed += outcome =>
         {
-            main.OnCaptureCompleted(outcome);
+            main.Gear.OnCaptureCompleted(outcome);
             overlay.ShowToast(outcome.Success ? outcome.Message : $"⚠ {outcome.Message}", outcome.Success);
             overlay.ShowRegionHighlight(outcome.RegionX, outcome.RegionY, outcome.RegionW, outcome.RegionH, outcome.Success);
         };
@@ -136,7 +134,7 @@ public partial class App : Application
         pipeline.SessionChanged += active =>
         {
             overlay.ShowToast(active ? "Detection ON — hover each gear piece" : "Detection stopped", true);
-            main.OnSessionChanged(active);
+            main.Gear.OnSessionChanged(active);
         };
 
         // Hotkey trigger (Phase 1). Owner window provides the HWND for RegisterHotKey. The combo
@@ -158,12 +156,12 @@ public partial class App : Application
             settings.HotkeyModifiers = _trigger.ActiveModifiers;
             settings.HotkeyVk = _trigger.ActiveVk;
         }
-        main.SetHotkeyStatus(_trigger.Registered, _trigger.ActiveModifiers, _trigger.ActiveVk);
+        main.Gear.SetHotkeyStatus(_trigger.Registered, _trigger.ActiveModifiers, _trigger.ActiveVk);
         if (healed)
-            main.NoteHotkeyHealed(_trigger.ActiveModifiers, _trigger.ActiveVk);
+            main.Gear.NoteHotkeyHealed(_trigger.ActiveModifiers, _trigger.ActiveVk);
 
         // "Set hotkey" → user presses a combo → we try to register it and persist on success.
-        main.RebindRequested += (mod, vk) =>
+        main.Gear.RebindRequested += (mod, vk) =>
         {
             bool ok = _trigger.Rebind(mod, vk);
             if (ok)

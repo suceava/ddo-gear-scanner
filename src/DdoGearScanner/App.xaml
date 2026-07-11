@@ -38,12 +38,14 @@
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
 
+        <!-- Section heading: meant to be the DOMINANT, eye-drawing label of its section — brighter,
+             bolder, and larger than the body content beneath it (never a small faded eyebrow). -->
         <Style x:Key="Section" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource Gold}" />
+            <Setter Property="Foreground" Value="{StaticResource GoldBright}" />
             <Setter Property="FontFamily" Value="Cambria" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,12,0,4" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,14,0,5" />
         </Style>
 
         <Style TargetType="Button">
@@ -165,6 +167,24 @@
                                 </Border>
                             </Popup>
                         </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Themed tooltip (the default system tooltip looks washed-out on the dark theme). -->
+        <Style TargetType="ToolTip">
+            <Setter Property="Foreground" Value="{StaticResource ParchStrong}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="HasDropShadow" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderGold}"
+                                BorderThickness="1" CornerRadius="4" Padding="9,5"
+                                TextElement.Foreground="{StaticResource ParchStrong}">
+                            <ContentPresenter />
+                        </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>

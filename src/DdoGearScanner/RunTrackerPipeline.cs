@@ -32,6 +32,9 @@ public sealed class RunTrackerPipeline
     private const long IntervalMs = 300;
     // A candidate quest name must be read this many consecutive ticks before we act (glitch guard).
     private const int StartDebounce = 2;
+    // A blank tracker (loading screen) must persist this many consecutive ticks after the popup closes to
+    // count as "entered" — long enough that a one-frame OCR blank can't fake it, short vs a real load.
+    private const int LoadDebounce = 3;
     // An active run is only auto-ended by a hub; a blank tracker is tolerated this long (dungeon loads /
     // porting) before treating it as stale (logout/crash cleanup).
     private const long StaleEmptyMs = 5 * 60 * 1000;
@@ -64,9 +67,11 @@ public sealed class RunTrackerPipeline
     private readonly ChatLogReader _chat;
     private readonly RunStore _store;
     private readonly Func<(string? Id, int? Level)> _character;
+    private readonly CharacterReader _avatar;
     private RegionRatios _trackerRegion;
     private RegionRatios _completionRegion;   // the calibrated quest-entry-popup box
     private RegionRatios _chatRegion;         // the calibrated chat-log box (completion signal)
+    private RegionRatios _avatarRegion;       // the calibrated avatar box (character name + level)
 
     private readonly object _lock = new();
     private volatile bool _enabled = true;
@@ -74,6 +79,7 @@ public sealed class RunTrackerPipeline
     private long _lastTick;
     private long _lastDumpTick;
     private int _idleTick;
+    private int _avatarTick;
 
     // The adventure-entry popup names the quest in a clean font (the tracker title is unreadable). We
     // hold it only long enough to cover a loading screen and attach it when the dungeon appears; a Cancel
@@ -87,8 +93,14 @@ public sealed class RunTrackerPipeline
     // State (guarded by _lock).
     private RunRecord? _current;       // the in-progress run, not yet in the store
     private long _emptySinceTick;      // when the tracker went blank while in a run (0 = not blank)
-    private IReadOnlyList<string> _lastChatLines = Array.Empty<string>();  // previous chat lines (to spot new arrivals by the shift)
+    private IReadOnlyList<string> _lastChatLines = Array.Empty<string>();  // previous chat lines (debug view only)
+    private bool _completionPresent;    // was "Adventure Completed" present in the last chat read (rising-edge detect)
+    private bool _completionBaselined;  // has this run taken its first chat read (baseline) yet
+    private int? _runXp;                // latest "receive N XP" seen in chat this run (XP is chat-only)
+    private string? _detectedName;     // latest character name OCR'd from the avatar region
+    private int? _detectedLevel;       // latest character level OCR'd from the avatar region
     private int _pendingCount;         // consecutive "entered a non-hub area" ticks while armed by a popup
+    private int _loadingTicks;         // consecutive blank-tracker ticks after the popup closed (loading in)
     private string? _lastFinalizedName;
     private bool _sawEmptySinceFinalize = true;
     private string? _lastLoggedName;   // debug: only log a tracker read when it changes
@@ -111,29 +123,117 @@ public sealed class RunTrackerPipeline
     private static void Log(string m) { try { File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} [runs] {m}{Environment.NewLine}"); } catch { } }
 
     public RunTrackerPipeline(
-        EntryPopupReader entry, QuestTrackerReader tracker, ChatLogReader chat, RunStore store,
-        Func<(string? Id, int? Level)> character, RegionRatios trackerRegion, RegionRatios completionRegion, RegionRatios chatRegion)
+        EntryPopupReader entry, QuestTrackerReader tracker, ChatLogReader chat, CharacterReader avatar, RunStore store,
+        Func<(string? Id, int? Level)> character, RegionRatios trackerRegion, RegionRatios completionRegion,
+        RegionRatios chatRegion, RegionRatios avatarRegion)
     {
         _entry = entry;
         _tracker = tracker;
         _chat = chat;
+        _avatar = avatar;
         _store = store;
         _character = character;
         _trackerRegion = trackerRegion;
         _completionRegion = completionRegion;
         _chatRegion = chatRegion;
+        _avatarRegion = avatarRegion;
     }
 
     public bool Enabled => _enabled;
     public RunRecord? Current { get { lock (_lock) { return _current; } } }
 
+    /// <summary>The character name/level most recently OCR'd from the avatar region — for showing who's
+    /// about to run a quest BEFORE a run is stamped. Nulls until the avatar region is calibrated + read.</summary>
+    public (string? Name, int? Level) DetectedCharacter { get { lock (_lock) { return (_detectedName, _detectedLevel); } } }
+
     public void SetEnabled(bool on) => _enabled = on;
     public bool Toggle() { _enabled = !_enabled; return _enabled; }
 
     /// <summary>Apply freshly-calibrated regions live (no restart). Volatile writes; picked up next frame.</summary>
-    public void SetRegions(RegionRatios tracker, RegionRatios completion, RegionRatios chat)
+    public void SetRegions(RegionRatios tracker, RegionRatios completion, RegionRatios chat, RegionRatios avatar)
     {
-        lock (_lock) { _trackerRegion = tracker; _completionRegion = completion; _chatRegion = chat; }
+        lock (_lock) { _trackerRegion = tracker; _completionRegion = completion; _chatRegion = chat; _avatarRegion = avatar; }
+    }
+
+    // ---- manual controls (the card's Start / Complete / Cancel) — detection is best-effort, so the user
+    // can always override it. All mutate state under _lock and raise events after releasing it, like Apply.
+
+    /// <summary>Manually begin a run (detection missed the entry). Uses the held entry popup's name/level
+    /// if one is pending, otherwise an unnamed run the user can rename in the grid.</summary>
+    public void ManualStart()
+    {
+        RunRecord started;
+        lock (_lock)
+        {
+            if (_current is not null) return;
+            started = NewRun(_pendingEntry?.Name ?? string.Empty) with { QuestLevel = _pendingEntry?.QuestLevel };
+            _current = started;
+            _pendingEntry = null; _armedArea = null; _shownEntryName = null;
+            _sawEmptySinceFinalize = false;
+            _lastChatLines = Array.Empty<string>();   // fresh chat baseline for this run
+            _completionBaselined = false;
+            _runXp = null;
+            _pendingCount = 0;
+            _emptySinceTick = 0;
+        }
+        Log($"manual-start \"{started.DungeonName}\"");
+        CurrentChanged?.Invoke(started);
+        EntryHeld?.Invoke(null);
+    }
+
+    /// <summary>Manually finalize the in-progress run as completed now (detection missed the completion).</summary>
+    public void ManualComplete()
+    {
+        RunRecord finalized;
+        lock (_lock)
+        {
+            if (_current is null || _current.Completed) return;
+            finalized = FinalizeCurrent(string.Empty);
+            _current = finalized;                        // keep it on the card until you leave/dismiss
+            _lastFinalizedName = finalized.DungeonName;
+            _sawEmptySinceFinalize = false;
+            _emptySinceTick = 0;
+            ResetPending();
+        }
+        Log($"manual-complete \"{finalized.DungeonName}\"");
+        RunFinalized?.Invoke(finalized);
+        CurrentChanged?.Invoke(finalized);
+    }
+
+    /// <summary>Rename the in-progress run (fix an OCR mis-parse of the quest name while it's live). Once
+    /// the run is completed/logged, rename it in the history table instead.</summary>
+    public void SetCurrentName(string name)
+    {
+        RunRecord? updated = null;
+        lock (_lock)
+        {
+            if (_current is null || _current.Completed) return;
+            string v = name?.Trim() ?? string.Empty;
+            if (v.Length == 0 || v == _current.DungeonName) return;
+            _current = _current with { DungeonName = v, Edited = true };
+            updated = _current;
+        }
+        if (updated is not null) CurrentChanged?.Invoke(updated);
+    }
+
+    /// <summary>Discard the current run entirely — it is NOT written to the log. Fixes a false start (a
+    /// wilderness area logged as a quest) or a run left hanging "in progress" after you moved on.</summary>
+    public void ManualCancel()
+    {
+        RunRecord? prev;
+        lock (_lock)
+        {
+            if (_current is null) return;
+            prev = _current;
+            _current = null;
+            _emptySinceTick = 0;
+            _sawEmptySinceFinalize = true;
+            _pendingEntry = null; _armedArea = null; _shownEntryName = null;
+            ResetPending();
+        }
+        Log($"cancelled \"{prev.DungeonName}\"");
+        CurrentChanged?.Invoke(null);
+        EntryHeld?.Invoke(null);
     }
 
     /// <summary>Wired to CaptureCoordinator.FrameArrived. Throttled; only one OCR read runs at a time.
@@ -148,22 +248,26 @@ public sealed class RunTrackerPipeline
         _lastTick = now;
 
         bool runActive;
-        RegionRatios trackerRegion, completionRegion, chatRegion;
-        lock (_lock) { runActive = _current is not null; trackerRegion = _trackerRegion; completionRegion = _completionRegion; chatRegion = _chatRegion; }
+        RegionRatios trackerRegion, completionRegion, chatRegion, avatarRegion;
+        lock (_lock) { runActive = _current is not null; trackerRegion = _trackerRegion; completionRegion = _completionRegion; chatRegion = _chatRegion; avatarRegion = _avatarRegion; }
         // Idle: scan the popup region (the popup only appears before entering). In a run: scan the chat
         // region for "Adventure Completed" — the reliable, persistent completion signal.
         bool readCompletion = !runActive && (++_idleTick % IdleCompletionEvery == 0);
+        // Avatar (character name/level) is static and only needed to stamp a run at start — read it
+        // occasionally while idle and cache the latest.
+        bool readAvatar = !runActive && (++_avatarTick % 3 == 0);
         bool debugChat = ChatDebug is not null && AppSettings.Instance.DebugMode && AppSettings.Instance.DebugShowChatText;
         bool readChat = runActive || debugChat;   // also read for the debug chat view while idle
         bool dump = AppSettings.Instance.DebugDumpCrops && now - _lastDumpTick >= DumpIntervalMs;
         if (dump) _lastDumpTick = now;
 
-        OpenCvMat trackerCrop, compCrop, chatCrop;
+        OpenCvMat trackerCrop, compCrop, chatCrop, avatarCrop;
         try
         {
             trackerCrop = new OpenCvMat(frame, RegionRect(frame, trackerRegion)).Clone();
             compCrop = (readCompletion || dump) ? new OpenCvMat(frame, RegionRect(frame, completionRegion)).Clone() : new OpenCvMat();
             chatCrop = (readChat || dump) ? new OpenCvMat(frame, RegionRect(frame, chatRegion)).Clone() : new OpenCvMat();
+            avatarCrop = (readAvatar || dump) ? new OpenCvMat(frame, RegionRect(frame, avatarRegion)).Clone() : new OpenCvMat();
         }
         catch (Exception ex) { Log($"crop error {ex.GetType().Name}: {ex.Message}"); Interlocked.Exchange(ref _busy, 0); return; }
 
@@ -177,6 +281,14 @@ public sealed class RunTrackerPipeline
                 if (readCompletion && !compCrop.Empty())
                     entry = _entry.Read(compCrop, out compRaw);
 
+                CharacterInfo? avatar = null;
+                string avatarRaw = string.Empty;
+                if ((readAvatar || dump) && !avatarCrop.Empty())
+                {
+                    avatar = _avatar.Read(avatarCrop, out avatarRaw);
+                    if (dump) Log($"char-parse: name=\"{avatar?.Name}\" lvl={avatar?.Level?.ToString() ?? "?"}");
+                }
+
                 // Completion fires only on a NEWLY-ARRIVED "Adventure Completed" line — detected by the
                 // append-only shift (see NewChatLines), so a stale one already in the log can't re-fire.
                 bool freshChat = false;
@@ -186,9 +298,24 @@ public sealed class RunTrackerPipeline
                 {
                     IReadOnlyList<string> chatLines = _chat.ReadLines(chatCrop);
                     chatRaw = string.Join("\n", chatLines);
+
+                    // Completion = RISING EDGE on "Adventure Completed" being present in the chat. This is
+                    // robust to a fast, noisy combat/effects chat where line-shift alignment fails (the
+                    // message just has to APPEAR, however fast the log scrolls). Baselined on the run's
+                    // first chat read so a stale completion still scrolled in from the prior quest can't
+                    // fire it; MinRunSeconds is a second guard.
+                    bool completionNow = chatLines.Any(RunTextParser.IsAdventureCompleted);
+                    if (!_completionBaselined) _completionBaselined = true;                 // first read: baseline only
+                    else if (completionNow && !_completionPresent) freshChat = true;        // absent → present
+                    _completionPresent = completionNow;
+
+                    // XP only ever appears in chat ("You receive N XP") — even when the TRACKER's
+                    // "Completed" is what finalizes the run. So capture the latest visible value every read
+                    // and let Apply keep the newest seen this run, ready for whichever signal completes it.
+                    chatXp = RunTextParser.ExtractChatXp(chatLines);
+
+                    // Kept only to feed the debug chat view.
                     IReadOnlyList<string> newLines = NewChatLines(chatLines, _lastChatLines);
-                    freshChat = newLines.Any(RunTextParser.IsAdventureCompleted);
-                    if (freshChat) chatXp = RunTextParser.ExtractChatXp(chatLines);   // grab "receive N XP" if it's shown
                     _lastChatLines = chatLines;
                     if (debugChat) ChatDebug?.Invoke(chatLines, newLines);
                 }
@@ -200,16 +327,17 @@ public sealed class RunTrackerPipeline
                     Log($"tracker-read: \"{readLabel}\"");
                     _lastLoggedName = readLabel;
                 }
-                if (dump) Dump(trackerCrop, compCrop, chatCrop, readLabel, compRaw, chatRaw);
+                if (dump) Dump(trackerCrop, compCrop, chatCrop, avatarCrop, readLabel, compRaw, chatRaw, avatarRaw);
 
-                Apply(tracker, entry, freshChat, chatXp, compRaw);
+                Apply(tracker, entry, freshChat, chatXp, compRaw, avatar);
             }
             catch (Exception ex) { Log($"read error {ex.GetType().Name}: {ex.Message}"); }
-            finally { trackerCrop.Dispose(); compCrop.Dispose(); chatCrop.Dispose(); Interlocked.Exchange(ref _busy, 0); }
+            finally { trackerCrop.Dispose(); compCrop.Dispose(); chatCrop.Dispose(); avatarCrop.Dispose(); Interlocked.Exchange(ref _busy, 0); }
         });
     }
 
-    private static void Dump(OpenCvMat trackerCrop, OpenCvMat compCrop, OpenCvMat chatCrop, string? questName, string compRaw, string chatRaw)
+    private static void Dump(OpenCvMat trackerCrop, OpenCvMat compCrop, OpenCvMat chatCrop, OpenCvMat avatarCrop,
+        string? questName, string compRaw, string chatRaw, string avatarRaw)
     {
         try
         {
@@ -218,7 +346,8 @@ public sealed class RunTrackerPipeline
             if (!trackerCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "tracker.png"), trackerCrop);
             if (!compCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "completion.png"), compCrop);
             if (!chatCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "chat.png"), chatCrop);
-            Log($"dump: tracker=\"{questName ?? "(none)"}\" completion=<<{compRaw.Replace("\n", " | ")}>> chat=<<{chatRaw.Replace("\n", " | ")}>>");
+            if (!avatarCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "character.png"), avatarCrop);
+            Log($"dump: tracker=\"{questName ?? "(none)"}\" completion=<<{compRaw.Replace("\n", " | ")}>> chat=<<{chatRaw.Replace("\n", " | ")}>> char=<<{avatarRaw.Replace("\n", " | ")}>>");
         }
         catch (Exception ex) { Log($"dump error {ex.GetType().Name}: {ex.Message}"); }
     }
@@ -230,7 +359,7 @@ public sealed class RunTrackerPipeline
     // Crucially, while a run is active we IGNORE which dungeon name is read (you can't hop dungeons), so
     // OCR flicker on the ornate title can't spawn phantom "went somewhere else" runs. A run ends only on
     // Completed, returning to a hub, or the tracker staying empty.
-    private void Apply(TrackerStatus tracker, QuestEntry? entry, bool freshChat, int? chatXp, string compRaw)
+    private void Apply(TrackerStatus tracker, QuestEntry? entry, bool freshChat, int? chatXp, string compRaw, CharacterInfo? avatar)
     {
         RunRecord? finalized = null;
         bool currentChanged = false;
@@ -243,6 +372,13 @@ public sealed class RunTrackerPipeline
 
         lock (_lock)
         {
+            if (chatXp is not null) _runXp = chatXp;   // keep the freshest chat XP for the active run
+            if (avatar is not null)                    // cache the latest character name/level for run-start stamping
+            {
+                if (!string.IsNullOrWhiteSpace(avatar.Name)) _detectedName = avatar.Name;
+                if (avatar.Level is not null) _detectedLevel = avatar.Level;
+            }
+
             // The adventure-entry popup (seen while still in town) names the quest cleanly — hold it until
             // a run starts. Refresh the timestamp each time it's read so it stays fresh while you pick a
             // difficulty.
@@ -266,7 +402,21 @@ public sealed class RunTrackerPipeline
                 bool stale = _emptySinceTick != 0 && nowTick - _emptySinceTick > StaleEmptyMs;
                 bool left = isHub || stale;
 
-                if (cur.Completed)
+                if (!cur.Completed && IsWildernessTracker(name))
+                {
+                    // Wilderness/explorer areas (e.g. The High Road) show a "Slayer: <Area> Menaces"
+                    // counter in the tracker — NOT a quest panel. DDO's entry popup for them looks like a
+                    // quest entry, so a run wrongly started; the slayer counter is the unambiguous tell.
+                    // DISCARD it — it is not a quest and must never be logged.
+                    Log($"discarded wilderness \"{cur.DungeonName}\" (tracker: \"{name}\")");
+                    _current = null;
+                    _emptySinceTick = 0;
+                    _sawEmptySinceFinalize = true;
+                    ResetPending();
+                    currentChanged = true;
+                    currentSnapshot = null;
+                }
+                else if (cur.Completed)
                 {
                     // Already recorded. Clear the completed card once you've left: a hub, OR the zone
                     // changed (the tracker goes blank as you load out — completing often ports you to a
@@ -288,7 +438,7 @@ public sealed class RunTrackerPipeline
                 else if ((freshChat || tracker.Completed) && (DateTime.UtcNow - cur.EnteredUtc).TotalSeconds >= MinRunSeconds)
                 {
                     // Write the run, but KEEP it on the card until you leave. XP is best-effort from chat.
-                    finalized = FinalizeCurrent(compRaw, chatXp);
+                    finalized = FinalizeCurrent(compRaw);
                     _current = finalized;                        // keep displaying the finished run
                     _lastFinalizedName = finalized.DungeonName;
                     _sawEmptySinceFinalize = false;
@@ -316,22 +466,40 @@ public sealed class RunTrackerPipeline
                 {
                     bool lingering = _lastFinalizedName is not null && NameEq(_lastFinalizedName, pe.Name) && !_sawEmptySinceFinalize;
                     bool popupStillUp = nowTick - _pendingEntryTick < PopupGoneMs;   // still at the entrance
-                    // Enter vs Cancel: entering LOADS you into the instance so your area changes; Cancel
-                    // leaves you exactly where you stood. So only start once the area differs from the
-                    // "outside" area we recorded while the popup was up.
                     bool areaChanged = AreaChanged(_armedArea, Key(name));
-                    bool entered = name is not null && !isHub && !popupStillUp && areaChanged;
-                    if (entered && !lingering)
+
+                    // Enter vs Cancel. Clicking Enter LOADS you into the instance: the tracker goes BLANK
+                    // during the loading screen, then the area changes. Cancel leaves you standing in the
+                    // same visible area (tracker stays non-blank). So an entry shows up as EITHER the area
+                    // changing OR the tracker going blank (loading) after the popup closed. The blank-load
+                    // path is what rescues quests entered from a wilderness (long load) or whose new area
+                    // has no readable title (camp/social hubs) — the old code only watched for area change
+                    // and dropped the pending entry when the load outlasted its TTL.
+                    if (!popupStillUp && name is null) _loadingTicks++;
+                    else if (name is not null) _loadingTicks = 0;
+
+                    bool enteredByArea = name is not null && !isHub && !popupStillUp && areaChanged;
+                    // The blank-tracker "loading" path only counts if you were standing somewhere with a
+                    // READABLE tracker (armed area non-blank) that then went blank — a real load-out. If the
+                    // tracker was blank the whole time (a hub / quest-giver spot with no active quest),
+                    // a blank tracker means nothing, and opening+cancelling a popup there must NOT start a run.
+                    bool enteredByLoad = _loadingTicks >= LoadDebounce && !string.IsNullOrEmpty(_armedArea);
+
+                    if ((enteredByArea || enteredByLoad) && !lingering)
                     {
-                        // Confirm the entry over a couple of ticks so a loading-screen flicker can't fire it.
-                        if (++_pendingCount >= StartDebounce)
+                        // Area-change debounces over a couple ticks (flicker guard); a sustained loading
+                        // screen is already its own debounce, so it starts as soon as it's confirmed.
+                        if (enteredByLoad || ++_pendingCount >= StartDebounce)
                         {
                             _current = NewRun(pe.Name) with { QuestLevel = pe.QuestLevel };
                             _pendingEntry = null;   // consumed by this run
                             _sawEmptySinceFinalize = false;
                             _lastChatLines = Array.Empty<string>();   // fresh chat baseline for this run
+                            _completionBaselined = false;             // re-baseline the completion rising-edge
+                            _runXp = null;                            // fresh XP for this run
                             _pendingCount = 0;
-                            Log($"started \"{pe.Name}\"");
+                            _loadingTicks = 0;
+                            Log($"started \"{pe.Name}\"{(enteredByLoad ? " (loading)" : "")}");
                             currentChanged = true;
                             currentSnapshot = _current;
                         }
@@ -339,12 +507,13 @@ public sealed class RunTrackerPipeline
                     else
                     {
                         _pendingCount = 0;
-                        // Cancelled / stayed put: the popup is gone but the area is unchanged (a real entry
-                        // would have loaded you elsewhere). Clear the armed entry now — no reason to hold it.
-                        if (!popupStillUp && name is not null && !isHub && !AreaChanged(_armedArea, Key(name)))
+                        // Cancelled / stayed put: the popup is gone but you're still in the SAME non-blank
+                        // area (a real entry would have blanked the tracker as it loaded). Clear the entry.
+                        if (!popupStillUp && name is not null && !isHub && !areaChanged)
                         {
                             _pendingEntry = null;
                             _armedArea = null;
+                            _loadingTicks = 0;
                         }
                         if (isHub || name is null) _sawEmptySinceFinalize = true;
                     }
@@ -353,6 +522,7 @@ public sealed class RunTrackerPipeline
                 {
                     // No popup held → nothing here is a run. Just track the "empty since finalize" flag.
                     _pendingCount = 0;
+                    _loadingTicks = 0;
                     if (isHub || name is null) _sawEmptySinceFinalize = true;
                 }
             }
@@ -378,12 +548,13 @@ public sealed class RunTrackerPipeline
 
     // ---- helpers (all called under _lock) ----
 
-    private RunRecord FinalizeCurrent(string compRaw, int? xp)
+    private RunRecord FinalizeCurrent(string compRaw)
     {
         DateTime nowUtc = DateTime.UtcNow;
         // KEEP the run's own name (from the entry popup). Completion must never rename it to whatever the
-        // tracker happens to read in-dungeon (which is garbage like "Recall").
-        RunRecord run = _current! with { CompletedUtc = nowUtc, Completed = true, Xp = xp ?? _current.Xp, RawOcrText = compRaw };
+        // tracker happens to read in-dungeon (which is garbage like "Recall"). XP comes from chat (_runXp),
+        // regardless of whether the chat or the tracker signalled completion.
+        RunRecord run = _current! with { CompletedUtc = nowUtc, Completed = true, Xp = _runXp ?? _current.Xp, RawOcrText = compRaw };
         _store.Add(run);
         Log($"finalized \"{run.DungeonName}\" xp={run.Xp?.ToString() ?? "?"}");
         _current = null;
@@ -401,12 +572,14 @@ public sealed class RunTrackerPipeline
         return abandoned;
     }
 
-    private void ResetPending() { _pendingCount = 0; }
+    private void ResetPending() { _pendingCount = 0; _loadingTicks = 0; }
 
     private RunRecord NewRun(string name)
     {
         (string? id, int? level) = _character();
-        return new RunRecord(RunRecord.NewId(), name, null, level, id, DateTime.UtcNow, null, null, false, string.Empty);
+        // Stamp the auto-detected character name + level (from the avatar region) when available.
+        return new RunRecord(RunRecord.NewId(), name, null, _detectedLevel ?? level, id, DateTime.UtcNow, null, null,
+            false, string.Empty, false, null, _detectedName);
     }
 
     private static Rect RegionRect(OpenCvMat frame, RegionRatios r)
@@ -429,6 +602,14 @@ public sealed class RunTrackerPipeline
         string ka = Key(a), kb = Key(b);
         return ka.Length > 0 && ka == kb;
     }
+
+    // A wilderness/explorer area, not a quest: DDO shows a "Slayer: <Area> Menaces (Heroic/Legendary)"
+    // counter in the tracker region there. Matching either tell ("slayer" / "menace") is robust to the
+    // ornate-font OCR garble seen in the log ("Slåyer:", "Menaces (Heroic"); no DDO quest title has these.
+    private static bool IsWildernessTracker(string? name)
+        => name is not null
+           && (name.Contains("slayer", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("menace", StringComparison.OrdinalIgnoreCase));
 
     // Newly-arrived chat lines, found by the append-only SHIFT: the chat is a scrolling log, so when new
     // lines appear the old ones move up by exactly that many rows. We find the smallest shift N at which

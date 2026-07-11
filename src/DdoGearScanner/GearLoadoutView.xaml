@@ -1,13 +1,10 @@
-<Window x:Class="DdoGearScanner.CaptureListWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:local="clr-namespace:DdoGearScanner"
-        Title="DDO Gear Scanner"
-        Width="980" Height="720"
-        WindowStartupLocation="Manual"
-        Icon="pack://application:,,,/appicon.ico"
-        Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}">
-    <Window.Resources>
+<UserControl x:Class="DdoGearScanner.GearLoadoutView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:DdoGearScanner"
+             Focusable="True"
+             Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}">
+    <UserControl.Resources>
         <!-- Loadout slot row (theme-aware) -->
         <Style TargetType="ListBoxItem">
             <Setter Property="Foreground" Value="{StaticResource Parchment}" />
@@ -31,7 +28,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
-    </Window.Resources>
+    </UserControl.Resources>
 
     <Grid Margin="14">
         <Grid.RowDefinitions>
@@ -40,29 +37,10 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,10">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="DDO Gear Scanner" FontSize="19" Style="{StaticResource Title}" VerticalAlignment="Center" />
-                <TextBlock Text="Character:" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}" Margin="22,0,8,0" />
-                <ComboBox x:Name="CharacterSelector" MinWidth="200"
-                          SelectionChanged="CharacterSelector_SelectionChanged" VerticalAlignment="Center">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Display}" Foreground="{StaticResource Parchment}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
-                <Button Content="New" Click="NewCharacter_Click" Margin="8,0,0,0" />
-                <Button Content="Edit" Click="EditCharacter_Click" Margin="0" />
-            </StackPanel>
-            <TextBlock x:Name="StatusText" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,6,0,0"
-                       Text="Press the hotkey to start detection, then hover each equipped gear piece." />
-        </StackPanel>
-
-        <!-- Toolbar -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
-            <Button x:Name="MenuButton" Content="☰  Menu" Click="Menu_Click" />
+        <!-- Toolbar: character selector (whose loadout) on the left, gear actions on the right -->
+        <DockPanel Grid.Row="0" Margin="0,0,0,8">
+            <Button x:Name="MatrixButton" DockPanel.Dock="Right" Content="Stacking matrix" Click="Matrix_Click" Margin="8,0,0,0" />
+            <Button x:Name="MenuButton" DockPanel.Dock="Right" Content="Menu  ▾" Click="Menu_Click" />
             <Popup x:Name="MenuPopup" PlacementTarget="{Binding ElementName=MenuButton}" Placement="Bottom"
                    StaysOpen="False" AllowsTransparency="True" VerticalOffset="3" PopupAnimation="Fade">
                 <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderGold}" BorderThickness="1"
@@ -77,16 +55,28 @@
                                 Content="Set Detection Hotkey (Insert)" Click="SetHotkey_Click" />
                         <Button x:Name="CalibrateButton" Style="{StaticResource MenuItemButton}"
                                 Content="Calibrate Slots" Click="Calibrate_Click" />
-                        <Button x:Name="CalibrateRunButton" Style="{StaticResource MenuItemButton}"
-                                Content="Calibrate Run Regions" Click="CalibrateRun_Click" />
-                        <Button x:Name="DebugSettingsButton" Style="{StaticResource MenuItemButton}"
-                                Content="Debug Settings…" Click="DebugSettings_Click" />
                     </StackPanel>
                 </Border>
             </Popup>
-            <Button x:Name="MatrixButton" Content="Stacking matrix" Click="Matrix_Click" />
-            <Button x:Name="RunTrackerButton" Content="Run tracker" Click="RunTracker_Click" />
-        </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Character:" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}" Margin="0,0,8,0" />
+                <ComboBox x:Name="CharacterSelector" MinWidth="200" VerticalAlignment="Center"
+                          SelectionChanged="CharacterSelector_SelectionChanged">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Display}" Foreground="{StaticResource Parchment}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Button Content="New" Click="NewCharacter_Click" Margin="8,0,0,0" />
+                <Button Content="Edit" Click="EditCharacter_Click" Margin="8,0,0,0" />
+            </StackPanel>
+        </DockPanel>
+
+        <!-- Status line -->
+        <TextBlock x:Name="StatusText" Grid.Row="1" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,10"
+                   TextWrapping="Wrap"
+                   Text="Press the hotkey to start detection, then hover each equipped gear piece." />
 
         <!-- Modal prompt shown while waiting for a hotkey keypress -->
         <Border x:Name="BindingPrompt" Grid.Row="0" Grid.RowSpan="3" Panel.ZIndex="100"
@@ -235,4 +225,4 @@
             </Border>
         </Grid>
     </Grid>
-</Window>
+</UserControl>

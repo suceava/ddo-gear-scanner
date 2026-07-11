@@ -1,7 +1,7 @@
 <Window x:Class="DdoGearScanner.OverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="DDO Gear Scanner Overlay"
+        Title="DDO Companion Overlay"
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"

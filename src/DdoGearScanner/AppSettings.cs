@@ -59,6 +59,14 @@ public sealed class AppSettings : INotifyPropertyChanged
     private bool _windowMaximized;
     public bool WindowMaximized { get => _windowMaximized; set => Set(ref _windowMaximized, value); }
 
+    // Which shell page was active at last exit ("Home" | "Gear" | "Run"); restored on next launch.
+    private string _activePage = "Home";
+    public string ActivePage { get => _activePage; set => Set(ref _activePage, value); }
+
+    // Run tracker: automatically open the quest's DDO wiki page in the browser when a run starts. Off by default.
+    private bool _autoOpenWiki;
+    public bool AutoOpenWiki { get => _autoOpenWiki; set => Set(ref _autoOpenWiki, value); }
+
     // Stacking-matrix window bounds (NaN => center on first open).
     private double _matrixLeft = double.NaN;
     public double MatrixLeft { get => _matrixLeft; set => Set(ref _matrixLeft, value); }
@@ -135,6 +143,13 @@ public sealed class AppSettings : INotifyPropertyChanged
     public double ChatX1 { get => _chatX1; set => Set(ref _chatX1, value); }
     public double ChatY1 { get => _chatY1; set => Set(ref _chatY1, value); }
 
+    // Avatar region — character NAME (above the health bar) + LEVEL (under the avatar). Default = top-left.
+    private double _characterX0 = 0.0, _characterY0 = 0.0, _characterX1 = 0.13, _characterY1 = 0.15;
+    public double CharacterX0 { get => _characterX0; set => Set(ref _characterX0, value); }
+    public double CharacterY0 { get => _characterY0; set => Set(ref _characterY0, value); }
+    public double CharacterX1 { get => _characterX1; set => Set(ref _characterX1, value); }
+    public double CharacterY1 { get => _characterY1; set => Set(ref _characterY1, value); }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -163,6 +178,8 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.WindowWidth = loaded.WindowWidth;
                     s.WindowHeight = loaded.WindowHeight;
                     s.WindowMaximized = loaded.WindowMaximized;
+                    s.ActivePage = loaded.ActivePage ?? "Home";
+                    s.AutoOpenWiki = loaded.AutoOpenWiki;
                     s.MatrixLeft = loaded.MatrixLeft;
                     s.MatrixTop = loaded.MatrixTop;
                     s.MatrixWidth = loaded.MatrixWidth;
@@ -194,6 +211,10 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.ChatY0 = loaded.ChatY0;
                     s.ChatX1 = loaded.ChatX1;
                     s.ChatY1 = loaded.ChatY1;
+                    s.CharacterX0 = loaded.CharacterX0;
+                    s.CharacterY0 = loaded.CharacterY0;
+                    s.CharacterX1 = loaded.CharacterX1;
+                    s.CharacterY1 = loaded.CharacterY1;
                 }
             }
         }

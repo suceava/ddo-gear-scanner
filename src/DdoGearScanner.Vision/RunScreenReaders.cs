@@ -115,6 +115,54 @@ public sealed class ChatLogReader
         => RunVision.Read(_ocr, regionBgr).Select(l => l.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
 }
 
+/// <summary>
+/// Reads DDO's avatar area (calibrated region) — the character NAME above the health bar and the LEVEL
+/// under the avatar — for stamping onto a run. Small region, so it's upscaled for crisp small text.
+/// </summary>
+public sealed class CharacterReader
+{
+    private readonly LocalOcr _ocr;
+    public CharacterReader(LocalOcr ocr) => _ocr = ocr;
+
+    public bool IsAvailable => _ocr.IsAvailable;
+
+    public CharacterInfo Read(OpenCvMat regionBgr, out string rawText)
+    {
+        double scale = regionBgr.Width <= 900 ? 3.0 : regionBgr.Width <= 1600 ? 2.0 : 1.0;
+        IReadOnlyList<OcrLine> lines = RunVision.ReadAt(_ocr, regionBgr, scale);
+        rawText = RunVision.JoinText(lines);
+        CharacterInfo info = RunTextParser.ParseCharacter(lines.Select(l => l.Text).ToList());
+
+        // The level pip ("20") sits as small white text OVER the portrait image, so the plain OCR skips
+        // it. If we didn't get a level, retry on a bright-text-only threshold that drops the portrait.
+        if (info.Level is null)
+        {
+            int? lvl = ReadLevelThresholded(regionBgr);
+            if (lvl is not null) info = info with { Level = lvl };
+        }
+        return info;
+    }
+
+    private int? ReadLevelThresholded(OpenCvMat regionBgr)
+    {
+        try
+        {
+            OpenCvMat src = regionBgr;
+            using OpenCvMat? conv = regionBgr.Channels() == 4 ? new OpenCvMat() : null;
+            if (conv is not null) { Cv2.CvtColor(regionBgr, conv, ColorConversionCodes.BGRA2BGR); src = conv; }
+            using OpenCvMat gray = new();
+            Cv2.CvtColor(src, gray, ColorConversionCodes.BGR2GRAY);
+            using OpenCvMat bin = new();
+            Cv2.Threshold(gray, bin, 165, 255, ThresholdTypes.Binary);   // keep only bright text
+            using OpenCvMat binBgr = new();
+            Cv2.CvtColor(bin, binBgr, ColorConversionCodes.GRAY2BGR);
+            var lines = RunVision.ReadAt(_ocr, binBgr, binBgr.Width <= 900 ? 3.0 : 2.0);
+            return RunTextParser.ParseCharacter(lines.Select(l => l.Text).ToList()).Level;
+        }
+        catch { return null; }
+    }
+}
+
 /// <summary>What the quest-tracker panel shows this tick: the quest title (or null when nothing is
 /// tracked) and whether it reads "Status: Completed". The tracker is the authoritative signal for BOTH
 /// entry (a title appears) and completion (the panel flips to Completed) — and it OCRs reliably because

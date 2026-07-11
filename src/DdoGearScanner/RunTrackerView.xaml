@@ -1,0 +1,192 @@
+<UserControl x:Class="DdoGearScanner.RunTrackerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}"
+             TextOptions.TextFormattingMode="Display">
+    <UserControl.Resources>
+        <!-- Minimal dark theming for the DataGrid (the default template is light). -->
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{StaticResource BgInput}" />
+            <Setter Property="Foreground" Value="{StaticResource GoldBright}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="10,9" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderGold}" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource Parchment}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Padding" Value="8,5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource SelectionBg}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Row delete: a borderless glyph that only appears when you hover the row. -->
+        <Style x:Key="RowDeleteButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Visibility" Value="Hidden" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="ToolTip" Value="Delete this run" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Padding="6,2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="#E0685C" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- Compact control bar (the nav rail already labels this page "Run Tracker") -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource BgPanel}" Padding="20,10"
+                BorderBrush="{StaticResource BorderGold}" BorderThickness="0,0,0,1">
+            <DockPanel LastChildFill="False">
+                <Button x:Name="SettingsButton" DockPanel.Dock="Right" Content="⚙ Settings"
+                        Click="Settings_Click" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <Button x:Name="CalibrateRunButton" DockPanel.Dock="Right" Content="Calibrate Run Regions"
+                        Click="CalibrateRun_Click" VerticalAlignment="Center" Margin="0,0,12,0" />
+            </DockPanel>
+        </Border>
+
+        <!-- Current Run card: quest name IS the title; status is a colored badge, timer the big readout -->
+        <Border x:Name="CurrentCard" DockPanel.Dock="Top" Background="{StaticResource BgPanelAlt}" Padding="24,18"
+                BorderBrush="{StaticResource BorderGold}" BorderThickness="0,0,0,2">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <!-- Title: the quest name during a run, otherwise the state. A ✎ lets you fix an
+                         OCR mis-parse of the name inline while the run is in progress. -->
+                    <Grid>
+                        <StackPanel x:Name="TitleRow" Orientation="Horizontal">
+                            <TextBlock x:Name="CurrentTitle" Style="{StaticResource Title}" FontSize="23"
+                                       TextTrimming="CharacterEllipsis" Text="No active run" VerticalAlignment="Center" />
+                            <Button x:Name="RenameButton" Content="✎" Click="Rename_Click" Visibility="Collapsed"
+                                    Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextMuted}"
+                                    Cursor="Hand" FontSize="15" Padding="10,0,0,0" VerticalAlignment="Center"
+                                    ToolTip="Rename this run (fix a mis-parsed name)" />
+                        </StackPanel>
+                        <TextBox x:Name="CurrentTitleEdit" Visibility="Collapsed" FontSize="21" MaxWidth="480"
+                                 HorizontalAlignment="Left" Background="{StaticResource BgInput}"
+                                 Foreground="{StaticResource ParchStrong}" BorderBrush="{StaticResource BorderGold}"
+                                 BorderThickness="1" Padding="6,3"
+                                 KeyDown="CurrentTitleEdit_KeyDown" LostFocus="CurrentTitleEdit_LostFocus" />
+                    </Grid>
+                    <!-- Status badge + meta chips -->
+                    <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                        <Border x:Name="StatusBadge" CornerRadius="9" Padding="10,3" Margin="0,0,10,0"
+                                VerticalAlignment="Center" Visibility="Collapsed">
+                            <TextBlock x:Name="StatusBadgeText" FontSize="11.5" FontWeight="Bold"
+                                       Foreground="{StaticResource BgWindow}" />
+                        </Border>
+                        <StackPanel x:Name="CurrentMeta" Orientation="Horizontal" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock x:Name="CurrentHint" Foreground="{StaticResource TextMuted}" FontSize="12.5"
+                               TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Margin="0,9,0,0"
+                               Visibility="Collapsed" />
+                    <!-- Manual overrides (detection is best-effort) -->
+                    <StackPanel x:Name="ActionButtons" Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button x:Name="StartButton" Content="Start run" Click="Start_Click" Margin="0,0,8,0" Visibility="Collapsed" />
+                        <Button x:Name="CompleteButton" Content="Complete run" Click="Complete_Click" Margin="0,0,8,0" Visibility="Collapsed" />
+                        <Button x:Name="CancelButton" Content="Cancel run" Click="Cancel_Click" Margin="0,0,8,0" Visibility="Collapsed" />
+                        <Button x:Name="WikiButton" Content="↗ Wiki" Click="OpenWiki_Click" Visibility="Collapsed" />
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock x:Name="CurrentTimer" Grid.Column="1" Text="" FontSize="30" FontFamily="Consolas"
+                           Foreground="{StaticResource GoldBright}" VerticalAlignment="Center" Margin="16,0,0,0" />
+            </Grid>
+        </Border>
+
+        <DataGrid x:Name="Grid" Margin="20,12" AutoGenerateColumns="False" CanUserAddRows="False"
+                  CanUserDeleteRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  HorizontalGridLinesBrush="{StaticResource BorderDim}" Background="{StaticResource BgWindow}"
+                  RowBackground="{StaticResource BgPanel}" AlternatingRowBackground="{StaticResource BgPanelAlt}"
+                  BorderBrush="{StaticResource BorderDim}" BorderThickness="1" SelectionMode="Single"
+                  CellEditEnding="Grid_CellEditEnding" ColumnWidth="Auto" RowHeight="30">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Dungeon" Binding="{Binding Dungeon}" Width="*" MinWidth="120">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Character" Binding="{Binding Character}" Width="100">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Difficulty" Binding="{Binding Difficulty}" Width="82" />
+                <DataGridTextColumn Header="Lvl" Binding="{Binding LevelText}" Width="46" />
+                <DataGridTextColumn Header="XP" Binding="{Binding XpText}" Width="72" />
+                <DataGridTextColumn Header="XP/min" Binding="{Binding XpPerMinute}" IsReadOnly="True" Width="64" />
+                <DataGridTextColumn Header="Time" Binding="{Binding Duration}" IsReadOnly="True" Width="62" />
+                <DataGridTextColumn Header="Entered" Binding="{Binding Entered}" IsReadOnly="True" Width="96" />
+                <DataGridTemplateColumn Header="Status" Width="60">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="14" FontWeight="Bold">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="↩" />
+                                        <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                                        <Setter Property="ToolTip" Value="Left (not completed)" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Completed}" Value="True">
+                                                <Setter Property="Text" Value="✓" />
+                                                <Setter Property="Foreground" Value="#8FCF8A" />
+                                                <Setter Property="ToolTip" Value="Completed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="" Width="38">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource RowDeleteButton}" Content="✕" Click="Delete_Click" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>

@@ -11,17 +11,18 @@ using DdoGearScanner.Model;
 namespace DdoGearScanner;
 
 /// <summary>
-/// Main window: the equipped LOADOUT sheet (one row per equipment slot, filled as you capture;
-/// re-capturing a slot overwrites it) on the left, and the selected item's detail + tooltip image
-/// on the right. Normal (not click-through) window — the click-through overlay is separate.
+/// The Gear Loadout page: the equipped LOADOUT sheet (one row per equipment slot, filled as you
+/// capture; re-capturing a slot overwrites it) on the left, and the selected item's detail + tooltip
+/// image on the right. Hosted as a page inside <see cref="ShellWindow"/>. Character selection and the
+/// global menu live on the shell; this view owns only gear-specific actions (detection, calibrate
+/// slots, hotkey, clear, edit, matrix).
 /// </summary>
-public partial class CaptureListWindow : Window
+public partial class GearLoadoutView : UserControl
 {
     private readonly CaptureStore _store;
     private readonly CharacterStore _charStore;
     private readonly AppSettings _settings;
     private readonly ObservableCollection<SlotRow> _rows;
-    private bool _switchingCharacter;
     // Captured tooltip images for THIS session, keyed by slot (slots loaded from disk have none).
     private readonly Dictionary<EquipSlot, BitmapImage> _crops = new();
 
@@ -34,25 +35,15 @@ public partial class CaptureListWindow : Window
     /// <summary>Raised when the user clicks the Calibrate slots button.</summary>
     public event Action? CalibrateRequested;
 
-    /// <summary>Raised when the user opens the run tracker window.</summary>
-    public event Action? RunTrackerRequested;
-
-    /// <summary>Raised when the user opens the run-region calibration window.</summary>
-    public event Action? RunCalibrateRequested;
-
-
     private bool _bindingHotkey;
+    private bool _switchingCharacter;
 
-    public CaptureListWindow(CaptureStore store, CharacterStore charStore, AppSettings settings, bool ocrAvailable)
+    public GearLoadoutView(CaptureStore store, CharacterStore charStore, AppSettings settings, bool ocrAvailable)
     {
         InitializeComponent();
-        WindowChrome.UseDarkTitleBar(this);
         _store = store;
         _charStore = charStore;
         _settings = settings;
-
-        WindowChrome.ApplyBounds(this, settings.WindowLeft, settings.WindowTop,
-            settings.WindowWidth, settings.WindowHeight, settings.WindowMaximized);
 
         _rows = new ObservableCollection<SlotRow>(SlotInfo.DisplayOrder.Select(s => new SlotRow(s)));
         SlotSheet.ItemsSource = _rows;
@@ -62,11 +53,6 @@ public partial class CaptureListWindow : Window
         if (!ocrAvailable)
             StatusText.Text = "⚠ Windows OCR engine unavailable — install an OCR language pack (Settings → Language).";
 
-        WindowChrome.PersistBounds(this, (l, t, w, h, m) =>
-        {
-            _settings.WindowLeft = l; _settings.WindowTop = t;
-            _settings.WindowWidth = w; _settings.WindowHeight = h; _settings.WindowMaximized = m;
-        });
         PreviewKeyDown += OnPreviewKeyDown;
     }
 
@@ -173,15 +159,14 @@ public partial class CaptureListWindow : Window
         CropImage.Source = crop;
     }
 
-
     private void SetHotkey_Click(object sender, RoutedEventArgs e)
     {
         MenuPopup.IsOpen = false;
         _bindingHotkey = true;
         BindingPrompt.Visibility = Visibility.Visible;
-        // The popup orphans keyboard focus when it closes; pull it back to the window so the next
+        // The popup orphans keyboard focus when it closes; pull it back to this view so the next
         // key press reaches OnPreviewKeyDown. Deferred so it runs after the popup actually closes.
-        Dispatcher.BeginInvoke(new Action(() => { Activate(); Keyboard.Focus(this); }),
+        Dispatcher.BeginInvoke(new Action(() => Keyboard.Focus(this)),
             System.Windows.Threading.DispatcherPriority.Input);
     }
 
@@ -228,7 +213,7 @@ public partial class CaptureListWindow : Window
     private void ClearList_Click(object sender, RoutedEventArgs e)
     {
         MenuPopup.IsOpen = false;
-        if (MessageBox.Show($"Clear {_charStore.Active.Name}'s whole loadout?", "DDO Gear Scanner",
+        if (MessageBox.Show($"Clear {_charStore.Active.Name}'s whole loadout?", "DDO Companion",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
             return;
         _store.Clear();
@@ -249,28 +234,9 @@ public partial class CaptureListWindow : Window
             _matrixWindow.Activate();
             return;
         }
-        _matrixWindow = new MatrixWindow(matrix) { Owner = this };
+        _matrixWindow = new MatrixWindow(matrix) { Owner = Window.GetWindow(this) };
         _matrixWindow.Closed += (_, _) => _matrixWindow = null;
         _matrixWindow.Show();
-    }
-
-    private void RunTracker_Click(object sender, RoutedEventArgs e) => RunTrackerRequested?.Invoke();
-
-    private void CalibrateRun_Click(object sender, RoutedEventArgs e)
-    {
-        MenuPopup.IsOpen = false;
-        RunCalibrateRequested?.Invoke();
-    }
-
-    private DebugSettingsWindow? _debugWindow;
-
-    private void DebugSettings_Click(object sender, RoutedEventArgs e)
-    {
-        MenuPopup.IsOpen = false;
-        if (_debugWindow is not null) { _debugWindow.Activate(); return; }
-        _debugWindow = new DebugSettingsWindow { Owner = this };
-        _debugWindow.Closed += (_, _) => _debugWindow = null;
-        _debugWindow.Show();
     }
 
     // ---- item editing ----
@@ -287,7 +253,7 @@ public partial class CaptureListWindow : Window
 
     private void OpenEditor(GearItem? existing, EquipSlot slot)
     {
-        var dlg = new ItemEditWindow(existing, slot) { Owner = this };
+        var dlg = new ItemEditWindow(existing, slot) { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() != true) return;
 
         EquipSlot target = dlg.TargetSlot;
@@ -333,7 +299,12 @@ public partial class CaptureListWindow : Window
             _matrixWindow.Update(Vision.StackingAnalyzer.Analyze(_store.Loadout, _charStore.Active.PlaystyleKey));
     }
 
-    // ---- characters ----
+    private void RefreshLoadout()
+    {
+        foreach (SlotRow row in _rows) row.Item = _store.Get(row.Slot);
+    }
+
+    // ---- characters (which character's loadout you're viewing; the Run Tracker auto-detects its own) ----
 
     private void PopulateCharacters()
     {
@@ -360,14 +331,9 @@ public partial class CaptureListWindow : Window
         StatusText.Text = $"Switched to {_charStore.Active.Name}.";
     }
 
-    private void RefreshLoadout()
-    {
-        foreach (SlotRow row in _rows) row.Item = _store.Get(row.Slot);
-    }
-
     private void NewCharacter_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new CharacterEditWindow(null, canDelete: false) { Owner = this };
+        var dlg = new CharacterEditWindow(null, canDelete: false) { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() != true || dlg.Result is null) return;
         CharacterProfile added = _charStore.Add(dlg.Result.Name, dlg.Result.Playstyle, dlg.Result.Classes, dlg.Result.Level);
         _store.SwitchTo(added.Id);
@@ -380,7 +346,7 @@ public partial class CaptureListWindow : Window
 
     private void EditCharacter_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new CharacterEditWindow(_charStore.Active, canDelete: _charStore.Profiles.Count > 1) { Owner = this };
+        var dlg = new CharacterEditWindow(_charStore.Active, canDelete: _charStore.Profiles.Count > 1) { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() != true) return;
 
         if (dlg.DeleteRequested)

@@ -59,60 +59,83 @@ extracting Stat+Value from the head and BonusType from the description (`+N <Typ
 killed the run-together + double-counting. Detection + OCR run on the SAME 3x-upscaled crop so the
 coordinates line up. Falls back to line-by-line parse when no bullets are found. See TOOLTIP_FORMAT.md.
 
-## Run tracker (second feature, added on top of the gear scanner)
+## App shell — "DDO Companion" (single window, nav rail, pages)
 
-A **dungeon-run logger** that reuses the SAME capture stream as the gear scanner. `RunTrackerPipeline`
-is a SECOND subscriber to `CaptureCoordinator.FrameArrived` (never touches the gear path). It OCRs
-**three user-calibrated, window-relative regions** — NOT full-window OCR, NOT hard-coded ratios. The
-user draws the boxes once in `RunCalibrationWindow` (a captured frame + 3 draggable rects: ① quest-entry
-dialog, ② quest tracker, ③ chat log); the ratios persist to `AppSettings` and can be re-drawn live.
+The product is now **DDO Companion** (user-visible name; assembly/namespace/`%APPDATA%` folder stay
+`DdoGearScanner`). `ShellWindow` is the main window: a header (product mark + a global ☰ menu with Debug
+Settings) + a left **nav rail** (Home · Gear Loadout · Run Tracker) swapping a `ContentControl`. The two
+features are **UserControl pages**: `GearLoadoutView` (the old loadout sheet + character selector + gear
+menu, extracted from the deleted `CaptureListWindow`) and `RunTrackerView` (extracted from the deleted
+`RunTrackerWindow`). `HomeView` is a landing page. The active page is remembered (`AppSettings.ActivePage`).
+Overlay, calibration, item/character edit, and debug windows remain separate floating windows. `App`
+creates the shell and routes pipeline events to `main.Gear` / `main.Run`. Character selection lives on
+the Gear page (the Run Tracker auto-detects character); the run history is NOT character-filtered.
 
-**Why three panels, and why calibrated:** DDO's ornate quest-title font OCRs to garbage, and panel
-positions vary per user's UI layout. So the name comes from the **quest-entry popup** (clean font,
-`EntryPopupReader`, OCR'd at high scale so "11" doesn't collapse to "1"); the **quest tracker**
-(`QuestTrackerReader`) is a secondary signal; and **completion** is read off the **chat log**
-(`ChatLogReader`) where "Adventure Completed" appears in a clean, persistent font. Readers live in
-`Vision/RunScreenReaders.cs`; all pure parsing (name-above-"Difficulty" geometry, OCR-tolerant level
-correction, `IsAdventureCompleted`, chat XP extraction) is in `Vision/RunTextParser.cs`, unit-tested in
-`RunTrackerTests`. Gets its own `LocalOcr` so continuous OCR can't race the gear OCR.
+## Run tracker
 
-**State machine** (`RunTrackerPipeline`): quest-entry popup seen → arm; run **starts** only if the
-player's area then *changes* from where they stood at the popup (so hitting Cancel doesn't start a run).
-**Completion** fires on a fresh "Adventure Completed" chat line (or tracker Completed) past a minimum
-duration. New chat lines are found by **append-only shift detection** (chat scrolls up by N lines;
-align by shift, not similarity) — conservative: no clean alignment → treat nothing as new, since a
-missed line beats a false completion. The finalized run KEEPS the popup-derived name (never tracker
-garbage). `RunRecord` (dungeon, difficulty, char level, entry/exit time, XP, XP/min) persists to
-`runs.json`, **hand-editable** in `RunTrackerWindow`. Each row opens the ddowiki quest page via
-`QuestWiki.Slug` (spaces→`_`, URL-encoded, slugify-and-go — no quest table).
+A **dungeon-run logger** — a SECOND subscriber to `CaptureCoordinator.FrameArrived` (never touches the
+gear path), with its own `LocalOcr`. It OCRs **four user-calibrated, window-relative regions** (drawn once
+in `RunCalibrationWindow`, persisted to `AppSettings`, re-drawable live): ① quest-entry dialog, ② quest
+tracker, ③ chat log, ④ **avatar** (character name + level). Readers are in `Vision/RunScreenReaders.cs`;
+all pure parsing is in `Vision/RunTextParser.cs` (unit-tested in `RunTrackerTests`).
 
-**Debug system.** A global `AppSettings.DebugMode` toggle gates everything. `DebugSettingsWindow`
-(☰ Menu → Debug Settings…) is data-bound to `AppSettings` with per-feature checkboxes. Two kinds of
-debug output, deliberately separated: **spatial** debug (the calibrated region borders) draws on the
-click-through game `OverlayWindow` and reacts to settings via `AppSettings.PropertyChanged`; **data**
-debug (live chat OCR — every line exactly as read, newly-detected lines green) lives in the movable/
-resizable `DebugDiagnosticsWindow` so it doesn't cover the game. `App` opens/closes that window to
-follow the data-debug toggle. The window has stacked sections so future diagnostics drop in as panels.
+**Signals (why each panel):**
+- **Name** = the **quest-entry popup** (`EntryPopupReader`, high-scale so "11" doesn't collapse to "1").
+  Names get an OCR fix: an onset `l` with no vowel before it → `i` ("Hlgh Road"→"High", "Rlddle"→"Riddle")
+  in `FixMisreadI`, leaving real post-vowel `l`s alone ("World", "Hall").
+- **Completion** = the quest tracker's **"Status: Completed"** line — but OCR drops the "Status:" so
+  `IsTrackerCompleted` matches a line whose only significant word starts with "complet" (rejects objective
+  lines that carry other words). This is the PRIMARY completion signal. Backup: a **rising edge** on
+  "Adventure Completed" appearing in the chat (robust to a fast, noisy combat chat where line-shift
+  alignment fails; baselined per-run so a stale message can't fire it).
+- **XP** only ever appears in chat ("You receive N XP") — captured every read and stamped at finalize,
+  whichever signal completed the run.
+- **Character** = the **avatar region** (`CharacterReader`): name reads on the plain OCR; the level pip
+  ("20") sits over the portrait so a second **bright-text threshold pass** recovers it.
 
-**Detection is OCR-only (no Claude — user vetoed AI) and still being field-tuned.** Everything is
+**Start / cancel logic** (`RunTrackerPipeline`): popup seen → arm (record the area you stood in). A run
+STARTS on either (a) the area **changing** from the armed area, or (b) a **loading screen** — the tracker
+was showing a readable area and then went **blank** (the load-out tell). The blank-load path requires the
+armed area to have been non-blank, so opening+**cancelling** a popup where the tracker is blank (a
+quest-giver spot) does NOT start a run. **Wilderness** areas show a "Slayer: <area> Menaces" counter — if
+an active run's tracker reads that, the run is **discarded** (never logged; DDO's entry popup for a
+wilderness looks like a quest). Character name+level are OCR'd while idle, cached, and stamped onto the
+run at start.
+
+**UI (`RunTrackerView`):** a Current-Run card (quest name = title, colored status **badge**, big timer,
+chips incl. **Character**, helper text) with manual **Start / Complete / Cancel** overrides and inline
+**✎ rename** of the live run; a **Settings** window (`RunSettingsWindow`) with an **auto-open-wiki-on-
+start** toggle (off by default); an "↗ Wiki" button (current run only — never in the table). History is a
+DataGrid of **all runs** (`RunStore.AllNewestFirst`) with editable Dungeon/Character/Difficulty/Level/XP,
+a ✓/↩ status glyph, and a hover-reveal ✕ delete. `runs.json` persists everything. Tracking is always on
+(no toggle — a user would never want it off). Wiki links via `QuestWiki.Slug`.
+
+## Debug system
+
+A global `AppSettings.DebugMode` toggle gates everything. `DebugSettingsWindow` (shell ☰ menu) is
+data-bound to `AppSettings`. Two kinds, deliberately separated: **spatial** debug (calibrated region
+borders) draws on the click-through game `OverlayWindow`; **data** debug (live chat OCR) lives in the
+movable `DebugDiagnosticsWindow`. Region crops + OCR text dump to `%APPDATA%\DdoGearScanner\run-debug\`
+every ~5s (tracker/completion/chat/character .png + a log line) — that's how the regions/parsers get tuned.
+
+**Detection is OCR-only (no Claude — user vetoed AI) and field-tuned from those dumps.** Everything is
 user-editable, so a miss costs an edit, not a lost run.
 
 **Still on the design-goal list, NOT yet built (don't drop these):**
-- **End-of-quest reward panel** — DDO's center-screen completion/XP summary. Richest single source
-  (quest name + difficulty + full XP breakdown in one panel), so still the wanted authoritative data
-  source at finalize. Current state: the chat-log "Adventure Completed" line is only the completion
-  *trigger*, and chat XP is best-effort; the original `CompletionPanelReader` was never finished and was
-  removed. A 4th calibrated region + reader is the intended way back in. (Stale "reward panel" comments
-  in `App`/`AppSettings`/`RunTrackerPipeline`/`RunRecord` are leftovers pointing at this goal.)
-- **Automatic difficulty capture** — read the highlighted difficulty radio in the entry popup (and/or
-  from the reward panel above).
+- **Automatic difficulty capture** — read the *selected* difficulty in the entry popup. OCR sees all the
+  difficulty words, so it's a visual/highlight-detection job (which radio is selected), not text — needs a
+  real popup crop to tune. Editable in the table meanwhile.
+- **End-of-quest reward panel** (optional nicety) — DDO's center-screen XP summary would give name +
+  difficulty + full XP in one panel; completion now works fine via tracker "Completed" + chat XP, so this
+  is no longer required. Stale "reward panel" comments in `App`/`AppSettings`/`RunTrackerPipeline`/
+  `RunRecord` are historical.
 
 ## Where things live
 
 - `src/DdoGearScanner.Model` — `GearItem`, `Mod`, `AugmentSlot`, `SetBonus`, `EquipSlot`. Pure, no deps.
 - `src/DdoGearScanner.Capture` — capture (copied from pg-loot) + `GameWindowTracker` (DDO match, DWM bounds) + `FrameGrabber`.
 - `src/DdoGearScanner.Vision` — `LocalOcr`, `TooltipChangeDetector` (the working detector), `TooltipTextParser`, `InventoryLocator`, `ITooltipReader`/`LocalOcrTooltipReader`, + dead detectors.
-- `src/DdoGearScanner` — WPF app: `App`, `CaptureListWindow` (loadout sheet + detail + the `ItemEditWindow` editor), `OverlayWindow` (toast + highlight), `LowLevelKeyHook` + `HotkeyTrigger`, `CapturePipeline`, `CalibrationController`, `SlotMap`, `SlotInfo`, `SlotRow`, `CaptureStore` (loadout.json), `MatrixWindow` (stacking puzzle), `RunTrackerPipeline` + `RunStore` (runs.json) + `RunTrackerWindow` (dungeon-run log), `AppSettings`.
+- `src/DdoGearScanner` — WPF app ("DDO Companion"): `App`, `ShellWindow` (main; nav rail + pages), `HomeView` / `GearLoadoutView` (loadout sheet + `ItemEditWindow`) / `RunTrackerView` (dungeon-run log) pages, `OverlayWindow` (toast + highlight + region borders), `LowLevelKeyHook` + `HotkeyTrigger`, `CapturePipeline`, `CalibrationController`, `SlotMap`/`SlotInfo`/`SlotRow`, `CaptureStore` (loadout.json), `MatrixWindow`, `RunTrackerPipeline` + `RunStore` (runs.json) + `RunCalibrationWindow` + `RunSettingsWindow`, `DebugSettingsWindow` + `DebugDiagnosticsWindow`, `AppSettings`. (Old `CaptureListWindow`/`RunTrackerWindow` were replaced by the shell + views.)
 - `tools/DdoDataImporter` — re-runnable console tool that imports DDOBuilderV2's game data → `data/items.json` + `data/bonustypes.json`. See its README.
 - `data/` — generated catalog (structured data; NOT `assets/`, which is binary media like ragdoll.png). `bonustypes.json` is embedded into Vision and is the authoritative stacking source.
 - `test/DdoGearScanner.Vision.Tests` — parser fixtures + dev diagnostics (machine-specific, read from %APPDATA%).

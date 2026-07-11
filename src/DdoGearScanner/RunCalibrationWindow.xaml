@@ -25,6 +25,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <Border Grid.Row="0" Grid.Column="0" Width="14" Height="14" CornerRadius="3" Margin="0,2,8,6"
@@ -47,6 +48,13 @@
                                FontWeight="SemiBold" Margin="0,0,10,0" />
                     <TextBlock Grid.Row="2" Grid.Column="2" Foreground="{StaticResource Parchment}" TextWrapping="Wrap"
                                Text="The bottom few lines of your chat. This is where &quot;Adventure Completed&quot; is detected — the reliable completion signal. Box the last ~4-6 lines." />
+
+                    <Border Grid.Row="3" Grid.Column="0" Width="14" Height="14" CornerRadius="3" Margin="0,6,8,0"
+                            Background="#33E090D0" BorderBrush="#E090D0" BorderThickness="2" VerticalAlignment="Top" />
+                    <TextBlock Grid.Row="3" Grid.Column="1" Text="④ Character (avatar)" Foreground="#EBB0DE"
+                               FontWeight="SemiBold" Margin="0,6,10,0" />
+                    <TextBlock Grid.Row="3" Grid.Column="2" Foreground="{StaticResource Parchment}" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Text="Optional — your portrait: character NAME (above the health bar) + LEVEL (under the avatar). Enables auto-detecting who ran each quest." />
                 </Grid>
 
                 <!-- Controls -->
@@ -54,6 +62,7 @@
                     <Button x:Name="PopupModeButton" Content="Draw ① dialog box" Click="PopupMode_Click" />
                     <Button x:Name="TrackerModeButton" Content="Draw ② tracker box" Click="TrackerMode_Click" />
                     <Button x:Name="ChatModeButton" Content="Draw ③ chat box" Click="ChatMode_Click" />
+                    <Button x:Name="CharModeButton" Content="Draw ④ character box" Click="CharMode_Click" />
                     <Border Width="1" Background="{StaticResource BorderDim}" Margin="8,2" />
                     <Button Content="Save" Click="Save_Click" />
                     <Button Content="Close" Click="Close_Click" />

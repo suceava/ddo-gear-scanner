@@ -1,0 +1,79 @@
+<Window x:Class="DdoGearScanner.ShellWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DdoGearScanner"
+        Title="DDO Companion"
+        Width="1120" Height="760" MinWidth="820" MinHeight="560"
+        WindowStartupLocation="Manual"
+        Icon="pack://application:,,,/appicon.ico"
+        Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}">
+    <Window.Resources>
+        <!-- Nav-rail item: flat, full-width, left-aligned; the active page is highlighted from code. -->
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource Parchment}" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="16,10" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6" Margin="6,1"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource HoverBg}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Global header: product mark + active character + global menu -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource BgPanel}" Padding="16,10"
+                BorderBrush="{StaticResource BorderGold}" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <!-- Global menu (right): icon only, no redundant label -->
+                <Button x:Name="GlobalMenuButton" DockPanel.Dock="Right" Content="☰" FontSize="16" Padding="12,3"
+                        Click="GlobalMenu_Click" VerticalAlignment="Center" ToolTip="Menu" />
+                <Popup x:Name="GlobalMenuPopup" PlacementTarget="{Binding ElementName=GlobalMenuButton}" Placement="Bottom"
+                       StaysOpen="False" AllowsTransparency="True" VerticalOffset="3" PopupAnimation="Fade">
+                    <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderGold}" BorderThickness="1"
+                            CornerRadius="4" Padding="4" MinWidth="200">
+                        <StackPanel>
+                            <Button Style="{StaticResource MenuItemButton}" Content="Debug Settings…" Click="DebugSettings_Click" />
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
+                <!-- Product mark (left) -->
+                <TextBlock Text="DDO Companion" FontSize="18" Style="{StaticResource Title}" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
+        <!-- Body: nav rail (left) + active page (right) -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="168" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderDim}"
+                    BorderThickness="0,0,1,0">
+                <StackPanel Margin="0,10,0,0">
+                    <Button x:Name="NavHome" Style="{StaticResource NavButton}" Content="⌂  Home" Click="NavHome_Click" />
+                    <Button x:Name="NavGear" Style="{StaticResource NavButton}" Content="⚔  Gear Loadout" Click="NavGear_Click" />
+                    <Button x:Name="NavRun" Style="{StaticResource NavButton}" Content="⏱  Run Tracker" Click="NavRun_Click" />
+                </StackPanel>
+            </Border>
+
+            <ContentControl x:Name="PageHost" Grid.Column="1" />
+        </Grid>
+    </DockPanel>
+</Window>

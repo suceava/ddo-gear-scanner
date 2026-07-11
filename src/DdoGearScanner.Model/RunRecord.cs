@@ -27,7 +27,10 @@ public sealed record RunRecord(
     bool Edited = false,
     // The quest's level from the adventure-entry popup (reliably OCR'd, unlike the character's own level
     // which is optional/manual). Distinct from CharacterLevel.
-    int? QuestLevel = null)
+    int? QuestLevel = null,
+    // Character NAME auto-detected from the avatar region (name above the health bar), when calibrated.
+    // Distinct from CharacterId (the scanned-gear profile); best-effort OCR, user-editable.
+    string? CharacterName = null)
 {
     /// <summary>Wall-clock length of the run, or null if it never ended (or the clock looks bogus).</summary>
     public TimeSpan? Duration => CompletedUtc is { } c && c > EnteredUtc ? c - EnteredUtc : null;

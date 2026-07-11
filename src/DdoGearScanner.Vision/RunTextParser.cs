@@ -9,6 +9,10 @@ namespace DdoGearScanner.Vision;
 /// authoritative name source. Captured before entry and stamped onto the run when it starts.</summary>
 public sealed record QuestEntry(string Name, int? QuestLevel);
 
+/// <summary>Character datapoints OCR'd from the avatar region: the name (shown above the health bar) and
+/// the level (shown under the avatar). Both best-effort.</summary>
+public sealed record CharacterInfo(string? Name, int? Level);
+
 /// <summary>
 /// Pure parsing for the run tracker: OCR text/boxes → the quest-entry popup's name+level, the quest
 /// tracker's name, and its completion state. Free of OpenCV capture so it can be unit-tested against
@@ -74,6 +78,35 @@ public static class RunTextParser
         return new QuestEntry(CleanName(best.Text), questLevel);
     }
 
+    /// <summary>Parse the avatar region: character NAME (the name-like line, above the health bar) and
+    /// LEVEL (a "Level N" or a bare 1–2 digit number under the avatar). HP/SP fractions ("500/500") and
+    /// pure numbers are skipped for the name. Player names are user-chosen, so we do NOT apply the quest
+    /// i↔l correction to them — just tidy whitespace. First-draft; tune against a real avatar crop.</summary>
+    public static CharacterInfo ParseCharacter(IReadOnlyList<string>? lines)
+    {
+        if (lines is null || lines.Count == 0) return new CharacterInfo(null, null);
+        string? name = null;
+        int? level = null;
+        foreach (string raw in lines)
+        {
+            string line = raw.Trim();
+            if (line.Length == 0) continue;
+
+            Match lm = Regex.Match(line, @"level\s*[:.]?\s*([0-9IlOo]{1,2})\b", RegexOptions.IgnoreCase);
+            if (lm.Success && TryOcrLevel(lm.Groups[1].Value, out int lv)) level ??= lv;
+            else if (level is null && Regex.IsMatch(line, @"^[0-9IlOo]{1,2}$") && TryOcrLevel(line, out int lv2)) level = lv2;
+
+            if (name is null && !Regex.IsMatch(line, @"\d\s*/\s*\d"))   // not an HP/SP fraction
+            {
+                string cand = Regex.Replace(line.Replace('_', ' '), @"\s+", " ").Trim(' ', '-', ':', '.', ',');
+                if (cand.Length >= 2 && !Regex.IsMatch(cand, @"^\d+$")
+                    && cand.Count(char.IsLetter) >= 2 && cand.Count(char.IsLetter) >= cand.Length / 2)
+                    name = cand;
+            }
+        }
+        return new CharacterInfo(name, level);
+    }
+
     // Lone articles/prepositions that show up as OCR fragments (esp. from chat) — never a quest name.
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
         { "the", "a", "an", "of", "and", "to", "in", "on", "or", "for", "with", "by", "house", "road" };
@@ -118,17 +151,23 @@ public static class RunTextParser
         return xp;
     }
 
-    /// <summary>True if the quest-tracker panel shows the quest finished — the panel's ONE line
-    /// "Status: Completed". Checked per-line (both words on the same OCR line), so a chat line like
-    /// "You have completed an objective" (which has "completed" but no "Status") can't trigger it. That
-    /// keeps completion isolated to the quest panel even when chat shares the tracker region.</summary>
+    /// <summary>True if the quest-tracker panel shows the quest finished — its "Status: Completed" line.
+    /// The OCR frequently DROPS the "Status:" and reads just "Completed", so we match any line whose only
+    /// significant word (ignoring "status") starts with "complet". That fires on a standalone "Completed"
+    /// yet still rejects an OBJECTIVE line like "Slay the Demon Razagnol (Completed)" — which carries other
+    /// words — so an objective ticking complete can't be mistaken for the quest finishing.</summary>
     public static bool IsTrackerCompleted(IEnumerable<string>? lines)
     {
         if (lines is null) return false;
         foreach (string line in lines)
-            if (Regex.IsMatch(line, @"status", RegexOptions.IgnoreCase) &&
-                Regex.IsMatch(line, @"\bcomplete", RegexOptions.IgnoreCase))
+        {
+            string cleaned = Regex.Replace(line.ToLowerInvariant(), @"[^a-z ]+", " ");
+            var words = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                               .Where(w => w.Length > 1 && w != "status")
+                               .ToList();
+            if (words.Count == 1 && words[0].StartsWith("complet", StringComparison.Ordinal))
                 return true;
+        }
         return false;
     }
 
@@ -176,7 +215,43 @@ public static class RunTextParser
         s = s.Trim('-', ':', '.', '!', ',', '"', '\'', '(', ')', ' ');
         foreach (string d in DifficultyWords)
             s = Regex.Replace(s, $@"\s+{d}$", "", RegexOptions.IgnoreCase);
-        return s.Trim();
+        return FixMisreadI(s).Trim();
+    }
+
+    private const string Vowels = "aeiouAEIOU";
+    private static bool IsVowel(char c) => Vowels.IndexOf(c) >= 0;
+
+    /// <summary>Windows OCR reads DDO's ornate title-font 'i' as a lowercase 'l' ("High"→"Hlgh",
+    /// "Riddle"→"Rlddle"). Correct an 'l' to 'i' ONLY where it can't be a real 'l': an onset 'l' (no vowel
+    /// yet in the word) that isn't sitting before a vowel — such a cluster is unpronounceable, so it's a
+    /// misread 'i'. This leaves genuine post-vowel 'l's alone ("World", "Hall", "Slave").</summary>
+    private static string FixMisreadI(string s)
+    {
+        char[] a = s.ToCharArray();
+        bool vowelSeen = false;   // has the current word had a vowel yet?
+        bool wordStart = true;
+        for (int i = 0; i < a.Length; i++)
+        {
+            char c = a[i];
+            if (!char.IsLetter(c)) { vowelSeen = false; wordStart = true; continue; }
+
+            if (c == 'l' && !vowelSeen)
+            {
+                char next = i + 1 < a.Length ? a[i + 1] : ' ';
+                bool nextVowel = char.IsLetter(next) && IsVowel(next);
+                if (!nextVowel)                       // onset 'l', not before a vowel ⇒ misread 'i'
+                {
+                    a[i] = wordStart ? 'I' : 'i';
+                    vowelSeen = true;
+                    wordStart = false;
+                    continue;
+                }
+            }
+
+            if (IsVowel(c)) vowelSeen = true;
+            wordStart = false;
+        }
+        return new string(a);
     }
 
     // A plausible quest name: has letters, a couple of them, and isn't just an objective/number line.

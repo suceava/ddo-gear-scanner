@@ -43,7 +43,7 @@ public partial class CharacterEditWindow : Window
 
     private void Delete_Click(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show($"Delete \"{NameBox.Text}\" and its loadout?", "DDO Gear Scanner",
+        if (MessageBox.Show($"Delete \"{NameBox.Text}\" and its loadout?", "DDO Companion",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         DeleteRequested = true;
         DialogResult = true;

@@ -8,6 +8,9 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>DdoGearScanner</RootNamespace>
     <AssemblyName>DdoGearScanner</AssemblyName>
+    <!-- User-visible product name. Assembly/namespace stay DdoGearScanner (repo + %APPDATA% path). -->
+    <Product>DDO Companion</Product>
+    <AssemblyTitle>DDO Companion</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>appicon.ico</ApplicationIcon>
   </PropertyGroup>
