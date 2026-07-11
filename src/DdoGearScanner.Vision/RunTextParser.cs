@@ -7,7 +7,7 @@ namespace DdoGearScanner.Vision;
 /// <summary>The clean-font datapoints from DDO's adventure-entry popup (shown before entering a quest).
 /// The quest NAME here reads reliably, unlike the ornate quest-tracker title — so this is the
 /// authoritative name source. Captured before entry and stamped onto the run when it starts.</summary>
-public sealed record QuestEntry(string Name, int? QuestLevel);
+public sealed record QuestEntry(string Name, int? QuestLevel, string? Difficulty = null);
 
 /// <summary>Character datapoints OCR'd from the avatar region: the name (shown above the health bar) and
 /// the level (shown under the avatar). Both best-effort.</summary>

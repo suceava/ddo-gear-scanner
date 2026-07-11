@@ -121,14 +121,21 @@ every ~5s (tracker/completion/chat/character .png + a log line) — that's how t
 **Detection is OCR-only (no Claude — user vetoed AI) and field-tuned from those dumps.** Everything is
 user-editable, so a miss costs an edit, not a lost run.
 
-**Still on the design-goal list, NOT yet built (don't drop these):**
-- **Automatic difficulty capture** — read the *selected* difficulty in the entry popup. OCR sees all the
-  difficulty words, so it's a visual/highlight-detection job (which radio is selected), not text — needs a
-  real popup crop to tune. Editable in the table meanwhile.
+**Difficulty auto-detect (in `EntryPopupReader.DetectDifficulty`) — "good enough for now":** the SELECTED
+difficulty is read by the LABEL, not the icon — the selected label goes bright WHITE, the rest stay gray,
+regardless of the tier's theme colour. (The icon glow is colour-biased: silver Casual is always brightest,
+red Reaper darkest — comparing icon brightness just picks the lightest tier, which was a dead end. Same
+for near-white on the icon.) Label X for every slot is EXTRAPOLATED from the fixed order (`DiffOrder`) so a
+tier stays a candidate when its label OCR merges ("Casual Normal" as one word) or drops. **Reaper is
+special**: selecting it swaps the icon for a "N Skull" dropdown, so a "Skull" reading = `Reaper N`. It
+carries forward across jittery frames and can show a stale value for a second before settling; the manual
+**Difficulty** buttons on the card are the backstop. Tuned from `run-debug/popup.png` + the `[difficulty=…]
+[white: …]` log line (crop ↔ log verified against the actually-highlighted tier).
+
+**Still on the design-goal list, NOT yet built:**
 - **End-of-quest reward panel** (optional nicety) — DDO's center-screen XP summary would give name +
-  difficulty + full XP in one panel; completion now works fine via tracker "Completed" + chat XP, so this
-  is no longer required. Stale "reward panel" comments in `App`/`AppSettings`/`RunTrackerPipeline`/
-  `RunRecord` are historical.
+  difficulty + full XP in one panel; completion works fine via tracker "Completed" + chat XP, so it's not
+  required. Stale "reward panel" comments in `App`/`AppSettings`/`RunTrackerPipeline`/`RunRecord` are historical.
 
 ## Where things live
 

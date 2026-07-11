@@ -77,8 +77,106 @@ public sealed class EntryPopupReader
         IReadOnlyList<OcrLine> lines = RunVision.ReadAt(_ocr, regionBgr, scale);
         rawText = RunVision.JoinText(lines);
         QuestEntry? entry = RunTextParser.ParseEntry(lines);
-        if (entry is not null) DebugDump(regionBgr, rawText);
+        if (entry is not null)
+        {
+            (string? diff, string dbg) = DetectDifficulty(regionBgr, lines, scale);
+            if (diff is not null) entry = entry with { Difficulty = diff };
+            DebugDump(regionBgr, rawText + $"  [difficulty={diff ?? "?"}] [white: {dbg}]");
+        }
         return entry;
+    }
+
+    // Difficulty labels the popup can show (lowercase, letters-only for matching).
+    private static readonly string[] DiffWords = { "casual", "normal", "hard", "elite", "reaper", "solo" };
+    // Fixed left→right order of the heroic difficulty icons — lets us extrapolate every icon's X from any
+    // two detected labels, so a merged/dropped label ("Casual Normal") doesn't lose those candidates.
+    private static readonly string[] DiffOrder = { "casual", "normal", "hard", "elite", "reaper" };
+
+    /// <summary>Which difficulty is SELECTED. Read by the LABEL, not the icon: the selected label goes
+    /// bright WHITE while the others stay dim gray, regardless of the tier's theme colour. (The icon glow is
+    /// colour-biased — silver Casual is brightest, red Reaper darkest — so comparing icon brightness just
+    /// picks the lightest-coloured tier, not the selection.) Label X for every slot is extrapolated from the
+    /// fixed difficulty order, so a tier is still a candidate when its label OCR merges/drops. Reaper is
+    /// special: selecting it swaps the icon for a "N Skull" dropdown, so a "Skull" reading = Reaper N.</summary>
+    private static (string? selected, string debug) DetectDifficulty(OpenCvMat regionBgr, IReadOnlyList<OcrLine> lines, double scale)
+    {
+        // Reaper: selecting it replaces the icon with a "N Skull" dropdown — the word "Skull" is itself the
+        // tell (there is no ring to read). Capture the skull tier when shown.
+        foreach (OcrLine l in lines)
+            if (l.Text.Contains("Skull", StringComparison.OrdinalIgnoreCase))
+            {
+                System.Text.RegularExpressions.Match sm = System.Text.RegularExpressions.Regex.Match(l.Text, @"\d+");
+                return (sm.Success ? $"Reaper {sm.Value}" : "Reaper", "skull");
+            }
+
+        var labels = new List<(string name, int cx, int top, int h)>();
+        foreach (OcrLine l in lines)
+        {
+            string t = new string(l.Text.Where(char.IsLetter).ToArray()).ToLowerInvariant();
+            foreach (string d in DiffWords)
+                if (t == d)
+                {
+                    Rect b = l.Bbox;
+                    labels.Add((d, (int)((b.X + b.Width / 2.0) / scale), (int)(b.Y / scale), Math.Max((int)(b.Height / scale), 8)));
+                    break;
+                }
+        }
+        if (labels.Count < 2) return (null, "few-labels");
+        labels.Sort((a, b) => a.cx.CompareTo(b.cx));
+
+        OpenCvMat bgr = regionBgr;
+        OpenCvMat? conv = null;
+        if (regionBgr.Channels() == 4) { conv = new OpenCvMat(); Cv2.CvtColor(regionBgr, conv, ColorConversionCodes.BGRA2BGR); bgr = conv; }
+        Rect full = new(0, 0, bgr.Width, bgr.Height);
+
+        int labelTop = labels.Min(x => x.top);
+        int labelH = Math.Max(labels.Max(x => x.h), 8);
+
+        // Extrapolate the LABEL X for ALL standard slots from the labels that DID read (map each detected
+        // name to its fixed-order index, fit cx = x0 + slot*spacing) — so every difficulty is a candidate
+        // even when its label OCR merged or dropped ("Casual Normal" as one word).
+        var pts = labels.Select(l => (idx: Array.IndexOf(DiffOrder, l.name), l.cx)).Where(p => p.idx >= 0).OrderBy(p => p.idx).ToList();
+        var cols = new List<(string name, int cx)>();
+        double spacing;
+        if (pts.Count >= 2 && pts[^1].idx != pts[0].idx)
+        {
+            spacing = (pts[^1].cx - pts[0].cx) / (double)(pts[^1].idx - pts[0].idx);
+            double x0 = pts[0].cx - pts[0].idx * spacing;
+            for (int s = 0; s < DiffOrder.Length; s++) cols.Add((DiffOrder[s], (int)Math.Round(x0 + s * spacing)));
+        }
+        else
+        {
+            spacing = (labels[^1].cx - labels[0].cx) / (double)Math.Max(1, labels.Count - 1);
+            foreach (var l in labels) cols.Add((l.name, l.cx));
+        }
+        int colHalf = Math.Max(labelH, (int)(Math.Abs(spacing) * 0.40));
+
+        string? best = null;
+        double bestWhite = -1, second = -1;
+        var sb = new System.Text.StringBuilder();
+        foreach ((string name, int cx) in cols)
+        {
+            // Sample the LABEL text row and count bright-WHITE pixels. Selected label = white (passes),
+            // unselected = gray (below threshold). Colour-independent, unlike the icon glow.
+            Rect lab = new Rect(cx - colHalf, labelTop - labelH / 3, colHalf * 2, (int)(labelH * 1.7)) & full;
+            double whiteFrac = 0;
+            if (lab.Width > 2 && lab.Height > 2)
+            {
+                using OpenCvMat sub = new(bgr, lab);
+                using OpenCvMat gray = new();
+                Cv2.CvtColor(sub, gray, ColorConversionCodes.BGR2GRAY);
+                using OpenCvMat mask = new();
+                Cv2.Threshold(gray, mask, 200, 255, ThresholdTypes.Binary);   // bright WHITE label text only
+                whiteFrac = (double)Cv2.CountNonZero(mask) / (sub.Rows * sub.Cols);
+            }
+            sb.Append($"{name[..Math.Min(4, name.Length)]}={whiteFrac:F3} ");
+            if (whiteFrac > bestWhite) { second = bestWhite; bestWhite = whiteFrac; best = name; }
+            else if (whiteFrac > second) second = whiteFrac;
+        }
+        conv?.Dispose();
+        string? selected = best is not null && bestWhite > 0.015 && bestWhite > second * 1.5
+            ? char.ToUpperInvariant(best[0]) + best[1..] : null;
+        return (selected, sb.ToString().Trim() + $" lblY={labelTop}");
     }
 
     // Diagnostic: dump the region crop + its OCR so mis-reads (e.g. the level) are visible.

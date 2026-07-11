@@ -166,7 +166,7 @@ public sealed class RunTrackerPipeline
         lock (_lock)
         {
             if (_current is not null) return;
-            started = NewRun(_pendingEntry?.Name ?? string.Empty) with { QuestLevel = _pendingEntry?.QuestLevel };
+            started = NewRun(_pendingEntry?.Name ?? string.Empty) with { QuestLevel = _pendingEntry?.QuestLevel, Difficulty = _pendingEntry?.Difficulty };
             _current = started;
             _pendingEntry = null; _armedArea = null; _shownEntryName = null;
             _sawEmptySinceFinalize = false;
@@ -211,6 +211,23 @@ public sealed class RunTrackerPipeline
             string v = name?.Trim() ?? string.Empty;
             if (v.Length == 0 || v == _current.DungeonName) return;
             _current = _current with { DungeonName = v, Edited = true };
+            updated = _current;
+        }
+        if (updated is not null) CurrentChanged?.Invoke(updated);
+    }
+
+    /// <summary>Set the current run's difficulty by hand (auto-detect can miss the popup's selection ring).
+    /// Works on the in-progress run and on a just-completed one still on the card (persists that one).</summary>
+    public void SetCurrentDifficulty(string? difficulty)
+    {
+        RunRecord? updated = null;
+        lock (_lock)
+        {
+            if (_current is null) return;
+            string? v = string.IsNullOrWhiteSpace(difficulty) ? null : difficulty.Trim();
+            if (v == _current.Difficulty) return;
+            _current = _current with { Difficulty = v, Edited = true };
+            if (_current.Completed) _store.Update(_current);   // already logged → update it too
             updated = _current;
         }
         if (updated is not null) CurrentChanged?.Invoke(updated);
@@ -385,6 +402,13 @@ public sealed class RunTrackerPipeline
             if (entry is not null)
             {
                 if (!NameEq(entry.Name, _pendingEntry?.Name)) Log($"entry-popup: \"{entry.Name}\" L{entry.QuestLevel?.ToString() ?? "?"}");
+                // Carry a previously-detected difficulty forward when THIS frame's read didn't catch the
+                // ring (the label OCR / ring detection jitters frame-to-frame, but the selection is stable).
+                // Only within the same quest — a new popup resets it.
+                if (entry.Difficulty is null && _pendingEntry is { } prev && NameEq(prev.Name, entry.Name) && prev.Difficulty is not null)
+                    entry = entry with { Difficulty = prev.Difficulty };
+                if (!string.Equals(entry.Difficulty, _pendingEntry?.Difficulty, StringComparison.Ordinal))
+                    Log($"difficulty: {entry.Difficulty ?? "?"}");
                 _pendingEntry = entry;
                 _pendingEntryTick = nowTick;
                 _armedArea = Key(name);   // the area you're standing in while choosing (the "outside")
@@ -491,7 +515,7 @@ public sealed class RunTrackerPipeline
                         // screen is already its own debounce, so it starts as soon as it's confirmed.
                         if (enteredByLoad || ++_pendingCount >= StartDebounce)
                         {
-                            _current = NewRun(pe.Name) with { QuestLevel = pe.QuestLevel };
+                            _current = NewRun(pe.Name) with { QuestLevel = pe.QuestLevel, Difficulty = pe.Difficulty };
                             _pendingEntry = null;   // consumed by this run
                             _sawEmptySinceFinalize = false;
                             _lastChatLines = Array.Empty<string>();   // fresh chat baseline for this run
@@ -531,8 +555,9 @@ public sealed class RunTrackerPipeline
             // few seconds), then clear — even though the entry stays armed internally to attach on entry.
             // So a Cancel makes the card go idle instead of sitting on READY forever.
             bool popupUp = _pendingEntry is not null && nowTick - _pendingEntryTick < PopupGoneMs;
-            // Key by name AND level so switching difficulty tier (which changes the level) refreshes the card.
-            string? shownKey = popupUp ? $"{_pendingEntry!.Name}|{_pendingEntry.QuestLevel}" : null;
+            // Key by name, level AND difficulty so the "ready" card re-renders when ANY of them changes
+            // (previously difficulty changes never refreshed the card — the detection updated but the UI didn't).
+            string? shownKey = popupUp ? $"{_pendingEntry!.Name}|{_pendingEntry.QuestLevel}|{_pendingEntry.Difficulty}" : null;
             if (!string.Equals(shownKey, _shownEntryName, StringComparison.Ordinal))
             {
                 _shownEntryName = shownKey;

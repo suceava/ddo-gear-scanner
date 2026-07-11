@@ -99,6 +99,7 @@ public partial class RunTrackerView : UserControl
         // ✎ rename is offered only for an in-progress run (finished runs are renamed in the table).
         if (!_renaming)
             RenameButton.Visibility = _current is { Completed: false } ? Visibility.Visible : Visibility.Collapsed;
+        DifficultyPicker.Visibility = _current is not null ? Visibility.Visible : Visibility.Collapsed;
         if (_current is { } c)
         {
             string name = string.IsNullOrWhiteSpace(c.DungeonName) ? "(unnamed quest)" : c.DungeonName;
@@ -114,7 +115,7 @@ public partial class RunTrackerView : UserControl
         {
             SetActionButtons(start: true, complete: false, cancel: false, wiki: !string.IsNullOrWhiteSpace(e.Name));
             SetCard(e.Name, "READY", Gold, "Enter the quest to start the run, or Start it manually.", "",
-                new (string, string?)[] { ("Character", WhoChip(_pipeline.DetectedCharacter)), ("Quest Lvl", e.QuestLevel?.ToString()) });
+                new (string, string?)[] { ("Character", WhoChip(_pipeline.DetectedCharacter)), ("Difficulty", e.Difficulty), ("Quest Lvl", e.QuestLevel?.ToString()) });
             return;
         }
         SetActionButtons(start: true, complete: false, cancel: false, wiki: false);
@@ -138,6 +139,10 @@ public partial class RunTrackerView : UserControl
     private void Start_Click(object sender, RoutedEventArgs e) => _pipeline.ManualStart();
     private void Complete_Click(object sender, RoutedEventArgs e) => _pipeline.ManualComplete();
     private void Cancel_Click(object sender, RoutedEventArgs e) => _pipeline.ManualCancel();
+    private void Difficulty_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button b && b.Tag is string d) _pipeline.SetCurrentDifficulty(d);
+    }
     private void OpenWiki_Click(object sender, RoutedEventArgs e) => OpenWiki(_current?.DungeonName ?? _heldEntry?.Name);
 
     // ---- inline rename of the in-progress run (fix an OCR mis-parse without waiting for the table) ----
