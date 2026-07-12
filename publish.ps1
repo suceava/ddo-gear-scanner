@@ -17,6 +17,7 @@
 
 param(
     [switch]$Zip,
+    [switch]$Compress,   # EnableCompressionInSingleFile: ~halves the exe, slightly slower first launch
     [string]$Release,
     [string]$Notes
 )
@@ -41,6 +42,7 @@ dotnet publish $proj `
     --self-contained `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
+    "-p:EnableCompressionInSingleFile=$($Compress.IsPresent.ToString().ToLower())" `
     -p:DebugType=None `
     -p:DebugSymbols=false `
     --nologo
