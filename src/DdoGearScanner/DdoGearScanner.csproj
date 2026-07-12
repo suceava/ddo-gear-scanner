@@ -13,6 +13,10 @@
     <AssemblyTitle>DDO Companion</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>appicon.ico</ApplicationIcon>
+    <!-- Ship only the English satellite resources — every other language pack is dead weight for this
+         Windows-only English app, and shaves ~15-25 MB off the single-file exe (WPF/.NET/OpenCvSharp
+         each ship 20+ localised resource DLLs). -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
