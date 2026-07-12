@@ -35,9 +35,13 @@ public sealed class RunTrackerPipeline
     // A blank tracker (loading screen) must persist this many consecutive ticks after the popup closes to
     // count as "entered" — long enough that a one-frame OCR blank can't fake it, short vs a real load.
     private const int LoadDebounce = 3;
-    // An active run is only auto-ended by a hub; a blank tracker is tolerated this long (dungeon loads /
-    // porting) before treating it as stale (logout/crash cleanup).
+    // A blank tracker is tolerated this long (dungeon loads / porting) before treating it as stale
+    // (logout/crash cleanup) — the last-ditch backstop; the primary "left" signal is the name check below.
     private const long StaleEmptyMs = 5 * 60 * 1000;
+    // "You left the dungeon" fires only after this many consecutive non-blank reads whose header ISN'T
+    // this run's quest — the header intermittently drops to an objective line, so one garbled read (or a
+    // brief internal transition) must not trip it. ~300ms/read, so this is a couple of sustained seconds.
+    private const int LeftDebounce = 8;
     // A run must last at least this long before a chat "Adventure Completed" can finish it — guards against
     // a stale completion message still scrolled in the chat instantly finishing a just-started run.
     private const double MinRunSeconds = 12;
@@ -108,6 +112,9 @@ public sealed class RunTrackerPipeline
     private long _pendingEntryTick;
     private string? _armedArea;        // the area key you stood in while the popup was up (to detect Enter vs Cancel)
     private string? _shownEntryName;   // the quest name currently shown on the "ready" card (null = not shown)
+    private bool _leftPromptActive;    // the "you left the dungeon — pause/cancel/keep going?" banner is showing
+    private bool _leftDismissed;       // user chose "keep going" — suppress re-prompting until back inside
+    private int _leftTicks;            // consecutive non-blank tracker reads whose header ISN'T this run's quest
 
     /// <summary>Raised when a run is written to the store (completed or abandoned).</summary>
     public event Action<RunRecord>? RunFinalized;
@@ -118,6 +125,9 @@ public sealed class RunTrackerPipeline
     public event Action<QuestEntry?>? EntryHeld;
     /// <summary>Debug: the chat OCR each read — (all lines, the lines detected as newly-arrived).</summary>
     public event Action<IReadOnlyList<string>, IReadOnlyList<string>>? ChatDebug;
+    /// <summary>Raised when detection thinks you've left the dungeon mid-run: true = show the
+    /// "pause / cancel / keep going?" banner, false = hide it (resolved or you're back inside).</summary>
+    public event Action<bool>? LeftPromptChanged;
 
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ddo-gear-scanner.log");
     private static void Log(string m) { try { File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} [runs] {m}{Environment.NewLine}"); } catch { } }
@@ -166,7 +176,7 @@ public sealed class RunTrackerPipeline
         lock (_lock)
         {
             if (_current is not null) return;
-            started = NewRun(_pendingEntry?.Name ?? string.Empty) with { QuestLevel = _pendingEntry?.QuestLevel, Difficulty = _pendingEntry?.Difficulty };
+            started = NewRun(_pendingEntry?.Name ?? string.Empty) with { QuestLevel = _pendingEntry?.QuestLevel, Difficulty = _pendingEntry?.Difficulty, QuestDuration = _pendingEntry?.Duration };
             _current = started;
             _pendingEntry = null; _armedArea = null; _shownEntryName = null;
             _sawEmptySinceFinalize = false;
@@ -216,6 +226,21 @@ public sealed class RunTrackerPipeline
         if (updated is not null) CurrentChanged?.Invoke(updated);
     }
 
+    /// <summary>Replace the current run with a hand-edited copy (from the card's Edit dialog). Only applies
+    /// if it's still the same run; persists it if it's already completed/logged.</summary>
+    public void UpdateCurrent(RunRecord updated)
+    {
+        RunRecord? result = null;
+        lock (_lock)
+        {
+            if (_current is null || updated.Id != _current.Id) return;
+            _current = updated with { Edited = true };
+            if (_current.Completed) _store.Update(_current);
+            result = _current;
+        }
+        if (result is not null) CurrentChanged?.Invoke(result);
+    }
+
     /// <summary>Set the current run's difficulty by hand (auto-detect can miss the popup's selection ring).
     /// Works on the in-progress run and on a just-completed one still on the card (persists that one).</summary>
     public void SetCurrentDifficulty(string? difficulty)
@@ -233,6 +258,51 @@ public sealed class RunTrackerPipeline
         if (updated is not null) CurrentChanged?.Invoke(updated);
     }
 
+    /// <summary>Pause the in-progress run — freezes the timer (records when) and, importantly, suspends all
+    /// completion/left/stale detection until Resume, so stepping out to town doesn't finish or cancel it.
+    /// Also clears any pending "you left?" banner (pausing answers it).</summary>
+    public void PauseCurrent()
+    {
+        RunRecord? updated = null;
+        lock (_lock)
+        {
+            if (_current is null || _current.Completed || _current.Paused) return;
+            _current = _current with { Paused = true, PausedUtc = DateTime.UtcNow };
+            _leftPromptActive = false; _leftDismissed = false;
+            updated = _current;
+        }
+        if (updated is not null) { Log($"paused \"{updated.DungeonName}\""); LeftPromptChanged?.Invoke(false); CurrentChanged?.Invoke(updated); }
+    }
+
+    /// <summary>Resume a paused run — shifts EnteredUtc forward by the paused span so elapsed continues
+    /// seamlessly, and re-arms detection. Re-baselines the completion signal so a stale chat line can't fire.</summary>
+    public void ResumeCurrent()
+    {
+        RunRecord? updated = null;
+        lock (_lock)
+        {
+            if (_current is null || !_current.Paused) return;
+            DateTime nowUtc = DateTime.UtcNow;
+            TimeSpan paused = _current.PausedUtc is { } p ? nowUtc - p : TimeSpan.Zero;
+            _current = _current with { Paused = false, PausedUtc = null, EnteredUtc = _current.EnteredUtc + paused };
+            _emptySinceTick = 0;
+            _leftTicks = 0;                               // fresh "am I still in my quest?" streak after resume
+            _completionBaselined = false;                 // re-baseline the completion rising-edge on the next read
+            _lastChatLines = Array.Empty<string>();
+            updated = _current;
+        }
+        if (updated is not null) { Log($"resumed \"{updated.DungeonName}\""); CurrentChanged?.Invoke(updated); }
+    }
+
+    /// <summary>User answered the "you left?" banner with "keep going" — hide it and suppress re-prompting
+    /// until the tracker shows you're back inside a quest.</summary>
+    public void DismissLeftPrompt()
+    {
+        lock (_lock) { if (!_leftPromptActive) return; _leftPromptActive = false; _leftDismissed = true; }
+        Log("left-prompt dismissed (keep going)");
+        LeftPromptChanged?.Invoke(false);
+    }
+
     /// <summary>Discard the current run entirely — it is NOT written to the log. Fixes a false start (a
     /// wilderness area logged as a quest) or a run left hanging "in progress" after you moved on.</summary>
     public void ManualCancel()
@@ -245,10 +315,12 @@ public sealed class RunTrackerPipeline
             _current = null;
             _emptySinceTick = 0;
             _sawEmptySinceFinalize = true;
+            _leftPromptActive = false; _leftDismissed = false;
             _pendingEntry = null; _armedArea = null; _shownEntryName = null;
             ResetPending();
         }
         Log($"cancelled \"{prev.DungeonName}\"");
+        LeftPromptChanged?.Invoke(false);
         CurrentChanged?.Invoke(null);
         EntryHeld?.Invoke(null);
     }
@@ -383,6 +455,7 @@ public sealed class RunTrackerPipeline
         RunRecord? currentSnapshot = null;
         bool entryShowChanged = false;
         QuestEntry? entryToShow = null;
+        bool? leftPromptShow = null;   // null = no change, true = show the banner, false = hide it
         long nowTick = Environment.TickCount64;
         string? name = tracker.Name;
         bool isHub = name is not null && PublicZones.Contains(Key(name));
@@ -414,19 +487,35 @@ public sealed class RunTrackerPipeline
                 _armedArea = Key(name);   // the area you're standing in while choosing (the "outside")
             }
 
-            if (_current is { } cur)
+            if (_current is { Paused: true })
             {
-                // "Left the dungeon" is a POSITIVE signal: you're back in a hub. An empty/garbled tracker
-                // is NOT leaving — dungeons have internal loading screens and porting between areas, which
-                // blank the tracker for a while. So we tolerate empty indefinitely, ending only on a hub,
-                // with a long empty-timeout purely as stale cleanup (logout/crash). Death-and-return isn't
-                // specially handled (fine to treat as one run).
+                // Paused: the user stepped out on purpose (recall/AFK). Suspend ALL completion/left/stale
+                // detection until they Resume — being in a hub, an empty tracker, or a stale chat line must
+                // not finish or cancel a paused run. (XP/avatar caching above still runs; that's harmless.)
+            }
+            else if (_current is { } cur)
+            {
+                // "Left the dungeon" = the tracker no longer shows THIS run's quest. The panel header is the
+                // quest name while you're in the instance and the ZONE name once you leave — so we fuzzy-match
+                // the tracker against the run's (clean, popup-sourced) quest name instead of consulting a zone
+                // whitelist. A blank/garbled tracker is NOT leaving (dungeon loads / porting blank it); we
+                // tolerate blank indefinitely, with the long empty-timeout purely as stale cleanup.
                 if (name is null) { if (_emptySinceTick == 0) _emptySinceTick = nowTick; }
                 else _emptySinceTick = 0;
                 bool stale = _emptySinceTick != 0 && nowTick - _emptySinceTick > StaleEmptyMs;
-                bool left = isHub || stale;
 
-                if (!cur.Completed && IsWildernessTracker(name))
+                // Debounced name check: count consecutive non-blank reads whose header isn't our quest. The
+                // header intermittently drops to an objective line, so a match on ANY line (checked in
+                // TrackerShowsQuest) resets the counter; a sustained streak of mismatches = a different zone.
+                bool weakName = Key(cur.DungeonName).Length < 4;   // manual run w/ no usable name → can't match
+                if (name is not null && !weakName)
+                    _leftTicks = TrackerShowsQuest(tracker, cur.DungeonName) ? 0 : _leftTicks + 1;
+                bool leftByName = !weakName && _leftTicks >= LeftDebounce;
+                // Fallback only when the run has no matchable name (manual start): the old hub signal. Stale
+                // is the last-ditch cleanup either way.
+                bool left = leftByName || (weakName && isHub) || stale;
+
+                if (!cur.Completed && IsWilderness(tracker))
                 {
                     // Wilderness/explorer areas (e.g. The High Road) show a "Slayer: <Area> Menaces"
                     // counter in the tracker — NOT a quest panel. DDO's entry popup for them looks like a
@@ -473,11 +562,28 @@ public sealed class RunTrackerPipeline
                 }
                 else if (left)
                 {
-                    finalized = AbandonCurrent();          // back in a hub without finishing
-                    _sawEmptySinceFinalize = true;
-                    currentChanged = true;
+                    // You appear to be out of the dungeon (back in a hub, or the tracker's been blank a long
+                    // while). Don't silently cancel — pausing, cancelling, and "still going, just stepped
+                    // out for a sec" are all real. ASK (once) via the card banner; leave the run in progress
+                    // until the user chooses. "Keep going" sets _leftDismissed so it won't nag every frame.
+                    if (!_leftPromptActive && !_leftDismissed)
+                    {
+                        _leftPromptActive = true;
+                        leftPromptShow = true;
+                        Log($"left-prompt \"{cur.DungeonName}\" (tracker: \"{name ?? "(blank)"}\")");
+                    }
                 }
-                // else: still in the run — a dungeon name (flicker ignored) or a transient empty/load. Wait.
+                else
+                {
+                    // Still in the run — a dungeon name (flicker ignored) or a transient empty/load. If we
+                    // read a real non-hub area, you're back inside: clear any "you left?" prompt and re-arm
+                    // so a LATER exit asks again.
+                    if (name is not null && !isHub && (_leftPromptActive || _leftDismissed))
+                    {
+                        if (_leftPromptActive) leftPromptShow = false;
+                        _leftPromptActive = false; _leftDismissed = false;
+                    }
+                }
             }
             else   // no active run
             {
@@ -515,7 +621,7 @@ public sealed class RunTrackerPipeline
                         // screen is already its own debounce, so it starts as soon as it's confirmed.
                         if (enteredByLoad || ++_pendingCount >= StartDebounce)
                         {
-                            _current = NewRun(pe.Name) with { QuestLevel = pe.QuestLevel, Difficulty = pe.Difficulty };
+                            _current = NewRun(pe.Name) with { QuestLevel = pe.QuestLevel, Difficulty = pe.Difficulty, QuestDuration = pe.Duration };
                             _pendingEntry = null;   // consumed by this run
                             _sawEmptySinceFinalize = false;
                             _lastChatLines = Array.Empty<string>();   // fresh chat baseline for this run
@@ -569,6 +675,7 @@ public sealed class RunTrackerPipeline
         if (finalized is not null) RunFinalized?.Invoke(finalized);
         if (currentChanged) CurrentChanged?.Invoke(currentSnapshot);
         if (entryShowChanged) EntryHeld?.Invoke(entryToShow);
+        if (leftPromptShow is { } show) LeftPromptChanged?.Invoke(show);
     }
 
     // ---- helpers (all called under _lock) ----
@@ -587,20 +694,11 @@ public sealed class RunTrackerPipeline
         return run;
     }
 
-    private RunRecord AbandonCurrent()
-    {
-        RunRecord abandoned = _current! with { CompletedUtc = DateTime.UtcNow, Completed = false };
-        _store.Add(abandoned);
-        Log($"left \"{abandoned.DungeonName}\"");
-        _current = null;
-        _emptySinceTick = 0;
-        return abandoned;
-    }
-
     private void ResetPending() { _pendingCount = 0; _loadingTicks = 0; }
 
     private RunRecord NewRun(string name)
     {
+        _leftTicks = 0;   // fresh "am I still in my quest?" streak for the new run
         (string? id, int? level) = _character();
         // Stamp the auto-detected character name + level (from the avatar region) when available.
         return new RunRecord(RunRecord.NewId(), name, null, _detectedLevel ?? level, id, DateTime.UtcNow, null, null,
@@ -631,10 +729,39 @@ public sealed class RunTrackerPipeline
     // A wilderness/explorer area, not a quest: DDO shows a "Slayer: <Area> Menaces (Heroic/Legendary)"
     // counter in the tracker region there. Matching either tell ("slayer" / "menace") is robust to the
     // ornate-font OCR garble seen in the log ("Slåyer:", "Menaces (Heroic"); no DDO quest title has these.
+    // Scanned across EVERY tracker line, not just the cleaned header — the "Slayer" counter often isn't the
+    // line the name-cleaner picks (it can carry a progress count, which the cleaner treats as an objective).
+    private static bool IsWilderness(TrackerStatus t)
+        => IsWildernessTracker(t.Name) || (t.Lines is not null && t.Lines.Any(IsWildernessTracker));
+
     private static bool IsWildernessTracker(string? name)
         => name is not null
            && (name.Contains("slayer", StringComparison.OrdinalIgnoreCase)
                || name.Contains("menace", StringComparison.OrdinalIgnoreCase));
+
+    // "Does the tracker still show THIS run's quest?" The header is the quest name in-instance; once you
+    // leave it becomes the zone name. Checked across ALL lines (the header intermittently drops to an
+    // objective read) with a fuzzy match — the ornate title font OCRs noisily.
+    private static bool TrackerShowsQuest(TrackerStatus t, string questName)
+    {
+        string q = Key(questName);
+        if (q.Length < 4) return false;
+        if (NameSimilar(t.Name, q)) return true;
+        if (t.Lines is not null)
+            foreach (string line in t.Lines)
+                if (NameSimilar(line, q)) return true;
+        return false;
+    }
+
+    // Fuzzy "these name the same quest": normalize to alnum-lowercase, accept containment (a noisier read
+    // wrapping the name, or a clean name inside it) or ≤40% edit distance (OCR of the title font is rough).
+    private static bool NameSimilar(string? line, string qKey)
+    {
+        string k = Key(line);
+        if (k.Length < 4) return false;
+        if (k.Contains(qKey) || qKey.Contains(k)) return true;
+        return Levenshtein(k, qKey) <= Math.Max(k.Length, qKey.Length) * 0.40;
+    }
 
     // Newly-arrived chat lines, found by the append-only SHIFT: the chat is a scrolling log, so when new
     // lines appear the old ones move up by exactly that many rows. We find the smallest shift N at which
@@ -681,8 +808,27 @@ public sealed class RunTrackerPipeline
         if (a.Length == 0) return b.Length > 0;   // was blank/none → any real area is a change
         if (b.Length == 0) return false;          // now blank (loading) → not a change for start purposes
         if (a == b) return false;
-        int common = 0, n = Math.Min(a.Length, b.Length);
-        while (common < n && a[common] == b[common]) common++;
-        return common < n * 0.6;                  // <60% shared prefix ⇒ a different area
+        // Compare by EDIT DISTANCE, not shared prefix: OCR jitters the ornate area font by a char or two
+        // ("eveningstar" -> "evemngstar"), and a prefix compare wrongly flagged that as a new area and
+        // false-started runs. Only a substantially-different string is a real area change.
+        return Levenshtein(a, b) > Math.Max(a.Length, b.Length) * 0.34;
+    }
+
+    private static int Levenshtein(string a, string b)
+    {
+        int[] prev = new int[b.Length + 1];
+        int[] cur = new int[b.Length + 1];
+        for (int j = 0; j <= b.Length; j++) prev[j] = j;
+        for (int i = 1; i <= a.Length; i++)
+        {
+            cur[0] = i;
+            for (int j = 1; j <= b.Length; j++)
+            {
+                int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                cur[j] = Math.Min(Math.Min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+            }
+            (prev, cur) = (cur, prev);
+        }
+        return prev[b.Length];
     }
 }

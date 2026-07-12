@@ -30,8 +30,20 @@ public sealed record RunRecord(
     int? QuestLevel = null,
     // Character NAME auto-detected from the avatar region (name above the health bar), when calibrated.
     // Distinct from CharacterId (the scanned-gear profile); best-effort OCR, user-editable.
-    string? CharacterName = null)
+    string? CharacterName = null,
+    // DDO quest length category from the entry popup ("Short"/"Medium"/"Long"/"Very Long"). Tracked for
+    // later use (farming stats); intentionally NOT shown in the run table yet.
+    string? QuestDuration = null,
+    // Transient state for the IN-PROGRESS run only: the user stepped out (recalled/AFK) and paused the
+    // timer. PausedUtc is when it froze; on Resume the pipeline shifts EnteredUtc forward by the paused
+    // span so elapsed continues seamlessly. A finalized/logged run is never Paused.
+    bool Paused = false,
+    DateTime? PausedUtc = null)
 {
+    /// <summary>Elapsed run time, honoring a pause (frozen at <see cref="PausedUtc"/> while paused).</summary>
+    public TimeSpan Elapsed(DateTime nowUtc)
+        => (Completed && CompletedUtc is { } c ? c : Paused && PausedUtc is { } p ? p : nowUtc) - EnteredUtc;
+
     /// <summary>Wall-clock length of the run, or null if it never ended (or the clock looks bogus).</summary>
     public TimeSpan? Duration => CompletedUtc is { } c && c > EnteredUtc ? c - EnteredUtc : null;
 

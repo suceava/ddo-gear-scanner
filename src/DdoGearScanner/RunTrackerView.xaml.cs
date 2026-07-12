@@ -45,6 +45,7 @@ public partial class RunTrackerView : UserControl
         _pipeline.RunFinalized += OnRunFinalized;
         _pipeline.CurrentChanged += OnCurrentChanged;
         _pipeline.EntryHeld += OnEntryHeld;
+        _pipeline.LeftPromptChanged += OnLeftPrompt;
 
         // Live "elapsed" readout for the active run. The view lives for the app's lifetime, so the
         // subscriptions + timer are never torn down (process exit handles that).
@@ -92,23 +93,39 @@ public partial class RunTrackerView : UserControl
         UpdateCurrentStatus();
     });
 
+    // The pipeline thinks you left the dungeon mid-run — show/hide the pause/cancel/keep-going banner.
+    private void OnLeftPrompt(bool show) => Dispatcher.BeginInvoke(() =>
+        LeftBanner.Visibility = show && _current is { Completed: false } ? Visibility.Visible : Visibility.Collapsed);
+
+    private void BannerPause_Click(object sender, RoutedEventArgs e) { _pipeline.PauseCurrent(); LeftBanner.Visibility = Visibility.Collapsed; }
+    private void BannerKeep_Click(object sender, RoutedEventArgs e) { _pipeline.DismissLeftPrompt(); LeftBanner.Visibility = Visibility.Collapsed; }
+    private void BannerCancel_Click(object sender, RoutedEventArgs e) { _pipeline.ManualCancel(); LeftBanner.Visibility = Visibility.Collapsed; }
+    private void PauseResume_Click(object sender, RoutedEventArgs e)
+    {
+        if (_current is { Paused: true }) _pipeline.ResumeCurrent();
+        else _pipeline.PauseCurrent();
+    }
+
     private static readonly (string, string?)[] NoChips = Array.Empty<(string, string?)>();
 
     private void UpdateCurrentStatus()
     {
-        // ✎ rename is offered only for an in-progress run (finished runs are renamed in the table).
-        if (!_renaming)
-            RenameButton.Visibility = _current is { Completed: false } ? Visibility.Visible : Visibility.Collapsed;
-        DifficultyPicker.Visibility = _current is not null ? Visibility.Visible : Visibility.Collapsed;
+        // ✎ Edit is available whenever there's a current run (in-progress or the just-completed one shown).
+        EditButton.Visibility = _current is not null ? Visibility.Visible : Visibility.Collapsed;
+        // The "you left?" banner only makes sense for a live, un-paused run.
+        if (_current is null or { Completed: true } or { Paused: true }) LeftBanner.Visibility = Visibility.Collapsed;
         if (_current is { } c)
         {
             string name = string.IsNullOrWhiteSpace(c.DungeonName) ? "(unnamed quest)" : c.DungeonName;
             bool done = c.Completed;
-            TimeSpan elapsed = done && c.CompletedUtc is { } cu ? cu - c.EnteredUtc : DateTime.UtcNow - c.EnteredUtc;
+            bool paused = c.Paused;
+            TimeSpan elapsed = c.Elapsed(DateTime.UtcNow);
             string? who = WhoChip((c.CharacterName, c.CharacterLevel));
             var chips = new (string, string?)[] { ("Character", who), ("Difficulty", c.Difficulty), ("Quest Lvl", c.QuestLevel?.ToString()), ("XP", c.Xp?.ToString("N0")) };
-            SetActionButtons(start: false, complete: !done, cancel: !done, wiki: !string.IsNullOrWhiteSpace(c.DungeonName));
-            SetCard(name, done ? "COMPLETED" : "IN PROGRESS", done ? CompletedAccent : GoldBright, null, Fmt(elapsed), chips);
+            SetActionButtons(start: false, complete: !done, cancel: !done, wiki: !string.IsNullOrWhiteSpace(c.DungeonName), pause: !done, paused: paused);
+            string badge = done ? "COMPLETED" : paused ? "PAUSED" : "IN PROGRESS";
+            Brush accent = done ? CompletedAccent : paused ? PausedAccent : GoldBright;
+            SetCard(name, badge, accent, null, Fmt(elapsed), chips);
             return;
         }
         if (_heldEntry is { } e)
@@ -128,67 +145,28 @@ public partial class RunTrackerView : UserControl
     private static string? WhoChip((string? Name, int? Level) c)
         => c.Name is { } n ? (c.Level is { } l ? $"{n} · {l}" : n) : null;
 
-    private void SetActionButtons(bool start, bool complete, bool cancel, bool wiki)
+    private void SetActionButtons(bool start, bool complete, bool cancel, bool wiki, bool pause = false, bool paused = false)
     {
         StartButton.Visibility = start ? Visibility.Visible : Visibility.Collapsed;
         CompleteButton.Visibility = complete ? Visibility.Visible : Visibility.Collapsed;
         CancelButton.Visibility = cancel ? Visibility.Visible : Visibility.Collapsed;
         WikiButton.Visibility = wiki ? Visibility.Visible : Visibility.Collapsed;
+        PauseButton.Visibility = pause ? Visibility.Visible : Visibility.Collapsed;
+        PauseButton.Content = paused ? "▶ Resume" : "⏸ Pause";
     }
 
     private void Start_Click(object sender, RoutedEventArgs e) => _pipeline.ManualStart();
     private void Complete_Click(object sender, RoutedEventArgs e) => _pipeline.ManualComplete();
     private void Cancel_Click(object sender, RoutedEventArgs e) => _pipeline.ManualCancel();
-    private void Difficulty_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button b && b.Tag is string d) _pipeline.SetCurrentDifficulty(d);
-    }
     private void OpenWiki_Click(object sender, RoutedEventArgs e) => OpenWiki(_current?.DungeonName ?? _heldEntry?.Name);
 
-    // ---- inline rename of the in-progress run (fix an OCR mis-parse without waiting for the table) ----
-
-    private bool _renaming;
-
-    private void Rename_Click(object sender, RoutedEventArgs e)
+    // ✎ Edit — one dialog for the whole live run (name / character / difficulty / level / XP), so the card
+    // edits every field consistently instead of a pencil for the name and a button row for difficulty.
+    private void Edit_Click(object sender, RoutedEventArgs e)
     {
-        if (_current is not { Completed: false } run) return;
-        _renaming = true;
-        CurrentTitleEdit.Text = run.DungeonName;
-        TitleRow.Visibility = Visibility.Collapsed;
-        CurrentTitleEdit.Visibility = Visibility.Visible;
-        CurrentTitleEdit.Focus();
-        CurrentTitleEdit.SelectAll();
-    }
-
-    private void CurrentTitleEdit_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter) { CommitRename(); e.Handled = true; }
-        else if (e.Key == Key.Escape) { CancelRename(); e.Handled = true; }
-    }
-
-    private void CurrentTitleEdit_LostFocus(object sender, RoutedEventArgs e) => CommitRename();
-
-    private void CommitRename()
-    {
-        if (!_renaming) return;
-        _renaming = false;
-        string name = CurrentTitleEdit.Text.Trim();
-        EndRename();
-        if (!string.IsNullOrWhiteSpace(name)) _pipeline.SetCurrentName(name);
-        UpdateCurrentStatus();
-    }
-
-    private void CancelRename()
-    {
-        if (!_renaming) return;
-        _renaming = false;
-        EndRename();
-    }
-
-    private void EndRename()
-    {
-        CurrentTitleEdit.Visibility = Visibility.Collapsed;
-        TitleRow.Visibility = Visibility.Visible;
+        if (_current is null) return;
+        var dlg = new RunEditWindow(_current) { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true && dlg.Result is not null) _pipeline.UpdateCurrent(dlg.Result);
     }
 
     private static void OpenWiki(string? questName)
@@ -239,6 +217,7 @@ public partial class RunTrackerView : UserControl
     }
 
     private static readonly Brush CompletedAccent = Freeze(0x8F, 0xCF, 0x8A);   // natural green
+    private static readonly Brush PausedAccent = Freeze(0xE8, 0xB3, 0x4A);      // amber
     private static Brush Freeze(byte r, byte g, byte b)
     {
         var brush = new SolidColorBrush(Color.FromRgb(r, g, b));

@@ -262,10 +262,11 @@ public sealed class CharacterReader
 }
 
 /// <summary>What the quest-tracker panel shows this tick: the quest title (or null when nothing is
-/// tracked) and whether it reads "Status: Completed". The tracker is the authoritative signal for BOTH
-/// entry (a title appears) and completion (the panel flips to Completed) — and it OCRs reliably because
-/// it's the same panel throughout the run.</summary>
-public readonly record struct TrackerStatus(string? Name, bool Completed);
+/// tracked), whether it reads "Status: Completed", and ALL of the OCR'd lines. The header line is the
+/// authoritative signal (a title = entry, "Status: Completed" = done), but callers also need the raw
+/// lines: the header intermittently drops to an objective read, so "is this still my quest?" and the
+/// wilderness "Slayer:" tell must be checked across every line, not just the one the cleaner picked.</summary>
+public readonly record struct TrackerStatus(string? Name, bool Completed, IReadOnlyList<string> Lines);
 
 /// <summary>
 /// Reads the quest-tracker panel (top-right objectives box) from a screen-region crop: the tracked quest
@@ -281,8 +282,9 @@ public sealed class QuestTrackerReader
     public TrackerStatus Read(OpenCvMat regionBgr)
     {
         IReadOnlyList<OcrLine> lines = RunVision.Read(_ocr, regionBgr);
-        string? name = RunTextParser.CleanTrackerName(lines.Select(l => l.Text));
-        bool completed = RunTextParser.IsTrackerCompleted(lines.Select(l => l.Text));
-        return new TrackerStatus(name, completed);
+        var texts = lines.Select(l => l.Text).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+        string? name = RunTextParser.CleanTrackerName(texts);
+        bool completed = RunTextParser.IsTrackerCompleted(texts);
+        return new TrackerStatus(name, completed, texts);
     }
 }

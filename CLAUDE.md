@@ -98,14 +98,32 @@ STARTS on either (a) the area **changing** from the armed area, or (b) a **loadi
 was showing a readable area and then went **blank** (the load-out tell). The blank-load path requires the
 armed area to have been non-blank, so opening+**cancelling** a popup where the tracker is blank (a
 quest-giver spot) does NOT start a run. **Wilderness** areas show a "Slayer: <area> Menaces" counter — if
-an active run's tracker reads that, the run is **discarded** (never logged; DDO's entry popup for a
-wilderness looks like a quest). Character name+level are OCR'd while idle, cached, and stamped onto the
-run at start.
+an active run's tracker reads that (checked across **all** tracker lines, not just the cleaned header —
+the counter often isn't the line the name-cleaner picks), the run is **discarded** (never logged; DDO's
+entry popup for a wilderness looks like a quest). Character name+level are OCR'd while idle, cached, and
+stamped onto the run at start.
 
-**UI (`RunTrackerView`):** a Current-Run card (quest name = title, colored status **badge**, big timer,
-chips incl. **Character**, helper text) with manual **Start / Complete / Cancel** overrides and inline
-**✎ rename** of the live run; a **Settings** window (`RunSettingsWindow`) with an **auto-open-wiki-on-
-start** toggle (off by default); an "↗ Wiki" button (current run only — never in the table). History is a
+**"Left the dungeon" = the tracker no longer shows THIS run's quest — NOT a zone whitelist.** The quest
+panel's header line is the quest name while you're in the instance and the ZONE name once you leave, so
+`TrackerShowsQuest` fuzzy-matches the run's clean (popup-sourced) quest name against **every** tracker
+line (the header intermittently drops to an objective read; ≤40% edit distance for the ornate-font OCR
+garble). "Left" fires only after `LeftDebounce` (8) consecutive non-blank reads that don't match — a
+blank tracker is loading/porting, never "left". A curated `PublicZones` hub list survives ONLY as the
+*start* gate ("a known hub isn't a quest") and a fallback for a manual run with no matchable name; the
+5-min blank `StaleEmptyMs` is last-ditch cleanup. Leaving does NOT auto-cancel: it raises a **banner**
+(see UI) since pausing / cancelling / "just stepped out" are all real.
+
+**UI (`RunTrackerView`):** a Current-Run card (quest name = title, colored status **badge** —
+IN PROGRESS / **PAUSED** (amber) / COMPLETED, big timer, chips incl. **Character**, helper text) with
+manual **Start / Complete / Pause·Resume / Cancel** overrides and a single **✎ Edit** dialog
+(`RunEditWindow`) that fixes ANY field consistently (name / character / difficulty / level / XP — XP is
+hidden for an in-progress run since it's unknown until completion; the difficulty combo is set on Loaded
+so the OCR'd value shows). **Pause** freezes the timer (the pipeline shifts EnteredUtc forward on Resume
+so elapsed continues seamlessly) and **suspends all completion/left detection** so town time can't finish
+or cancel it. When "left" is detected mid-run, a **banner** offers ⏸ Pause / ▸ Keep going / Cancel run —
+the run keeps running (timer + detection) until you choose; "Keep going" suppresses re-prompting until
+you're back inside. A **Settings** window (`RunSettingsWindow`) has an **auto-open-wiki-on-start** toggle
+(off by default); an "↗ Wiki" button shows on the current run only — never in the table. History is a
 DataGrid of **all runs** (`RunStore.AllNewestFirst`) with editable Dungeon/Character/Difficulty/Level/XP,
 a ✓/↩ status glyph, and a hover-reveal ✕ delete. `runs.json` persists everything. Tracking is always on
 (no toggle — a user would never want it off). Wiki links via `QuestWiki.Slug`.

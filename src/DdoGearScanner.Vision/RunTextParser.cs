@@ -7,7 +7,7 @@ namespace DdoGearScanner.Vision;
 /// <summary>The clean-font datapoints from DDO's adventure-entry popup (shown before entering a quest).
 /// The quest NAME here reads reliably, unlike the ornate quest-tracker title — so this is the
 /// authoritative name source. Captured before entry and stamped onto the run when it starts.</summary>
-public sealed record QuestEntry(string Name, int? QuestLevel, string? Difficulty = null);
+public sealed record QuestEntry(string Name, int? QuestLevel, string? Difficulty = null, string? Duration = null);
 
 /// <summary>Character datapoints OCR'd from the avatar region: the name (shown above the health bar) and
 /// the level (shown under the avatar). Both best-effort.</summary>
@@ -75,8 +75,19 @@ public static class RunTextParser
             if (m.Success && TryOcrLevel(m.Groups[1].Value, out int lv)) { questLevel = lv; break; }
         }
 
-        return new QuestEntry(CleanName(best.Text), questLevel);
+        // Optional quest DURATION category shown under the level ("Duration: Short/Medium/Long/Very Long").
+        string? duration = null;
+        foreach (OcrLine line in lines)
+        {
+            Match dm = Regex.Match(line.Text, @"dur\w*\s*[:.]?\s*(very\s*long|short|medium|long)", RegexOptions.IgnoreCase);
+            if (dm.Success) { duration = TitleCase(dm.Groups[1].Value); break; }
+        }
+
+        return new QuestEntry(CleanName(best.Text), questLevel, Duration: duration);
     }
+
+    private static string TitleCase(string s)
+        => string.Join(" ", Regex.Split(s.Trim(), @"\s+").Select(w => w.Length == 0 ? w : char.ToUpperInvariant(w[0]) + w[1..].ToLowerInvariant()));
 
     /// <summary>Parse the avatar region: character NAME (the name-like line, above the health bar) and
     /// LEVEL (a "Level N" or a bare 1–2 digit number under the avatar). HP/SP fractions ("500/500") and

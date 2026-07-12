@@ -86,23 +86,9 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <!-- Title: the quest name during a run, otherwise the state. A ✎ lets you fix an
-                         OCR mis-parse of the name inline while the run is in progress. -->
-                    <Grid>
-                        <StackPanel x:Name="TitleRow" Orientation="Horizontal">
-                            <TextBlock x:Name="CurrentTitle" Style="{StaticResource Title}" FontSize="23"
-                                       TextTrimming="CharacterEllipsis" Text="No active run" VerticalAlignment="Center" />
-                            <Button x:Name="RenameButton" Content="✎" Click="Rename_Click" Visibility="Collapsed"
-                                    Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextMuted}"
-                                    Cursor="Hand" FontSize="15" Padding="10,0,0,0" VerticalAlignment="Center"
-                                    ToolTip="Rename this run (fix a mis-parsed name)" />
-                        </StackPanel>
-                        <TextBox x:Name="CurrentTitleEdit" Visibility="Collapsed" FontSize="21" MaxWidth="480"
-                                 HorizontalAlignment="Left" Background="{StaticResource BgInput}"
-                                 Foreground="{StaticResource ParchStrong}" BorderBrush="{StaticResource BorderGold}"
-                                 BorderThickness="1" Padding="6,3"
-                                 KeyDown="CurrentTitleEdit_KeyDown" LostFocus="CurrentTitleEdit_LostFocus" />
-                    </Grid>
+                    <!-- Title: the quest name during a run, otherwise the state -->
+                    <TextBlock x:Name="CurrentTitle" Style="{StaticResource Title}" FontSize="23"
+                               TextTrimming="CharacterEllipsis" Text="No active run" />
                     <!-- Status badge + meta chips -->
                     <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
                         <Border x:Name="StatusBadge" CornerRadius="9" Padding="10,3" Margin="0,0,10,0"
@@ -115,22 +101,29 @@
                     <TextBlock x:Name="CurrentHint" Foreground="{StaticResource TextMuted}" FontSize="12.5"
                                TextWrapping="Wrap" MaxWidth="620" HorizontalAlignment="Left" Margin="0,9,0,0"
                                Visibility="Collapsed" />
-                    <!-- Manual overrides (detection is best-effort) -->
+                    <!-- "You left the dungeon" prompt — replaces the old silent auto-cancel. Pausing,
+                         cancelling and "just stepped out" are all real, so we ask instead of guessing. -->
+                    <Border x:Name="LeftBanner" Visibility="Collapsed" Margin="0,12,0,0" Padding="14,10"
+                            CornerRadius="8" Background="#3A2E10" BorderBrush="#E8B34A" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="Looks like you left the dungeon — what should this run do?"
+                                       Foreground="{StaticResource ParchStrong}" FontSize="13" FontWeight="SemiBold" />
+                            <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                                <Button x:Name="BannerPause" Content="⏸ Pause" Click="BannerPause_Click" Margin="0,0,8,0" />
+                                <Button x:Name="BannerKeep" Content="▸ Keep going" Click="BannerKeep_Click" Margin="0,0,8,0" />
+                                <Button x:Name="BannerCancel" Content="Cancel run" Click="BannerCancel_Click" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <!-- Manual overrides (detection is best-effort). ✎ Edit opens a dialog to fix ANY field
+                         (name/character/difficulty/level/XP) — one consistent editor for the live run. -->
                     <StackPanel x:Name="ActionButtons" Orientation="Horizontal" Margin="0,14,0,0">
                         <Button x:Name="StartButton" Content="Start run" Click="Start_Click" Margin="0,0,8,0" Visibility="Collapsed" />
                         <Button x:Name="CompleteButton" Content="Complete run" Click="Complete_Click" Margin="0,0,8,0" Visibility="Collapsed" />
+                        <Button x:Name="PauseButton" Content="⏸ Pause" Click="PauseResume_Click" Margin="0,0,8,0" Visibility="Collapsed" />
                         <Button x:Name="CancelButton" Content="Cancel run" Click="Cancel_Click" Margin="0,0,8,0" Visibility="Collapsed" />
+                        <Button x:Name="EditButton" Content="✎ Edit" Click="Edit_Click" Margin="0,0,8,0" Visibility="Collapsed" />
                         <Button x:Name="WikiButton" Content="↗ Wiki" Click="OpenWiki_Click" Visibility="Collapsed" />
-                    </StackPanel>
-
-                    <!-- Manual difficulty override for the live run (fixes an auto-detect miss) -->
-                    <StackPanel x:Name="DifficultyPicker" Orientation="Horizontal" Margin="0,10,0,0" Visibility="Collapsed">
-                        <TextBlock Text="Difficulty:" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,8,0" />
-                        <Button Content="Casual" Tag="Casual" Click="Difficulty_Click" Padding="9,3" Margin="0,0,5,0" />
-                        <Button Content="Normal" Tag="Normal" Click="Difficulty_Click" Padding="9,3" Margin="0,0,5,0" />
-                        <Button Content="Hard" Tag="Hard" Click="Difficulty_Click" Padding="9,3" Margin="0,0,5,0" />
-                        <Button Content="Elite" Tag="Elite" Click="Difficulty_Click" Padding="9,3" Margin="0,0,5,0" />
-                        <Button Content="Reaper" Tag="Reaper" Click="Difficulty_Click" Padding="9,3" Margin="0,0,5,0" />
                     </StackPanel>
                 </StackPanel>
                 <TextBlock x:Name="CurrentTimer" Grid.Column="1" Text="" FontSize="30" FontFamily="Consolas"
