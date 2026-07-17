@@ -103,15 +103,16 @@ the counter often isn't the line the name-cleaner picks), the run is **discarded
 entry popup for a wilderness looks like a quest). Character name+level are OCR'd while idle, cached, and
 stamped onto the run at start.
 
-**"Left the dungeon" = the tracker no longer shows THIS run's quest — NOT a zone whitelist.** The quest
-panel's header line is the quest name while you're in the instance and the ZONE name once you leave, so
-`TrackerShowsQuest` fuzzy-matches the run's clean (popup-sourced) quest name against **every** tracker
-line (the header intermittently drops to an objective read; ≤40% edit distance for the ornate-font OCR
-garble). "Left" fires only after `LeftDebounce` (8) consecutive non-blank reads that don't match — a
-blank tracker is loading/porting, never "left". A curated `PublicZones` hub list survives ONLY as the
-*start* gate ("a known hub isn't a quest") and a fallback for a manual run with no matchable name; the
-5-min blank `StaleEmptyMs` is last-ditch cleanup. Leaving does NOT auto-cancel: it raises a **banner**
-(see UI) since pausing / cancelling / "just stepped out" are all real.
+**"Left the dungeon" = the tracker no longer shows THIS run's quest** (`TrackerShowsQuest`: fuzzy match
+of the run's clean popup-sourced name against every tracker line, ≤40% edit distance, debounced
+`LeftDebounce`=15 non-blank reads). This became viable only after a CALIBRATION fix: the quest-name title
+bar OCRs FINE in-dungeon (an engine bake-off proved Windows OCR reads the ornate font cleanly) — the
+calibrated tracker region had simply been drawn BELOW the title bar, so the app had never seen the name
+(a full run read objectives 166x, the name 0x). The region must include the panel's title bar; over-tall
+is safe (the panel grows downward from a fixed top). Blank tracker = loading/porting, never "left";
+`PublicZones` (isHub) remains a harmless early trigger + the fallback for unnamed manual runs; the 5-min
+blank `StaleEmptyMs` is last-ditch cleanup. Leaving does NOT auto-cancel: it raises a **banner** (see UI)
+since pausing / cancelling / "just stepped out" are all real.
 
 **UI (`RunTrackerView`):** a Current-Run card (quest name = title, colored status **badge** —
 IN PROGRESS / **PAUSED** (amber) / COMPLETED, big timer, chips incl. **Character**, helper text) with
@@ -136,8 +137,16 @@ borders) draws on the click-through game `OverlayWindow`; **data** debug (live c
 movable `DebugDiagnosticsWindow`. Region crops + OCR text dump to `%APPDATA%\DdoGearScanner\run-debug\`
 every ~5s (tracker/completion/chat/character .png + a log line) — that's how the regions/parsers get tuned.
 
-**Detection is OCR-only (no Claude — user vetoed AI) and field-tuned from those dumps.** Everything is
-user-editable, so a miss costs an edit, not a lost run.
+**Detection: local Windows OCR for polling; optional LLM (OpenRouter) for EVENT reads.** All OCR goes
+through the `IOcrEngine` seam (a 2026-07 bake-off on real gameplay kept Windows OCR and rejected
+Tesseract/Paddle — see `tools/OcrBakeoff`). With **AI reading** enabled (☰ → Settings — a USER setting:
+`LlmEnabled` + OpenRouter API key (plaintext by choice) + model, default `google/gemini-2.5-flash`),
+event moments go to a vision LLM and override the local read when they land: gear TOOLTIPS
+(`OpenRouterTooltipReader` → whole structured GearItem in one shot, falls back to local on any failure),
+the quest ENTRY POPUP (one call per popup; LLM owns name/level/duration, difficulty stays live-local),
+and the AVATAR (one call per character key — a set, so OCR-jitter variants can't re-trigger; the
+confirmed name is authoritative). The 3/sec tracker+chat polling NEVER hits the API. `[llm]` log lines
+trace every call. Everything is user-editable, so a miss costs an edit, not a lost run.
 
 **Difficulty auto-detect (in `EntryPopupReader.DetectDifficulty`) — "good enough for now":** the SELECTED
 difficulty is read by the LABEL, not the icon — the selected label goes bright WHITE, the rest stay gray,
@@ -173,6 +182,11 @@ model we use. `tools/DdoDataImporter` (run: `dotnet run --project tools/DdoDataI
 that data, converts it, and writes `data/items.json` + `data/bonustypes.json` — built to be a scheduled
 refresh, not a one-off.
 
+**Catalog data does NOT overwrite LLM-read tooltips.** A scanned item = catalog IDENTITY (name match →
+`Matched`) + INSTANCE stats (the tooltip's real mods — legacy items keep original stats DDO has since
+changed; the catalog can't know your copy). Local-OCR captures still get full catalog mod replacement.
+See **LEGACY_ITEMS.md** for the model, legacy/variant detection design, and the UI-badging parking lot.
+
 **Bonus-type STACKING is now data-driven and authoritative.** `BonusTypes.StacksWithSelf` loads the
 self-stacking set from the embedded `bonustypes.json` (`Stacking == "Always"`). The previous
 hand-crawled list (`GAME_RULES.md`) was WRONG — it stacked Artifact/Primal/Circumstance/Feat/Epic
@@ -204,6 +218,9 @@ the name, + `crop-*.png`). Persistence: `loadout.json`, `slotmap.json`, `setting
 ## Status & next
 
 Working: capture, motion detection, hotkey-over-game, overlay highlight, slot calibration + tagging
-+ gating, loadout-sheet UI, name/type parsing. **User vetoed AI/Claude.** Next candidates: finish
-the mod/bonus-type parsing; persist per-item crops; clean up the dead detector code; maybe push the
-UI closer to the web prototype.
++ gating, loadout-sheet UI, run tracker (start/complete/pause/leave detection, difficulty, character),
+**AI reading via OpenRouter** (user setting; event reads only — the early no-AI stance was lifted once
+local OCR plateaued ~75-80%; local OCR remains the always-on fallback and the polling engine). Window
+placement persists correctly across mixed-DPI monitors (restore gated + re-applied post-render; maximize
+sequenced after the move). Next candidates: legacy/variant mod diffing + badges (see LEGACY_ITEMS.md);
+run-history analytics on the web app; the backend push (gear + runs).

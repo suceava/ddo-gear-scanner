@@ -26,6 +26,8 @@
                           IsChecked="{Binding RunDebugOverlay}" IsEnabled="{Binding DebugMode}" />
                 <CheckBox Content="Show detected chat text (live OCR — new lines in green)"
                           IsChecked="{Binding DebugShowChatText}" IsEnabled="{Binding DebugMode}" />
+                <CheckBox Content="Save tracker crops (timestamped, for OCR tuning)"
+                          IsChecked="{Binding DebugSaveTrackerCrops}" IsEnabled="{Binding DebugMode}" />
             </StackPanel>
         </Border>
 

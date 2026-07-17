@@ -33,9 +33,18 @@ public partial class App : Application
         _grabber = new FrameGrabber();
         _coordinator.FrameArrived += _grabber.OnFrame;
 
-        // Vision: local OCR reader (Phase 1).
+        // Vision: local OCR reader. Everything OCRs through the IOcrEngine seam; Windows OCR won the
+        // 2026-07 engine bake-off (Tesseract/Paddle lost on real gameplay and were removed).
         LocalOcr ocr = new();
-        ITooltipReader reader = new LocalOcrTooltipReader(ocr);
+
+        // AI reading (OpenRouter) — USER setting, app-wide. The config provider reads live settings, so
+        // toggling it in Settings applies immediately, no restart. Event reads only: gear tooltips (below),
+        // quest-entry popup + avatar (run pipeline); polling stays on local OCR.
+        OpenRouterClient llmClient = new(() =>
+            settings.LlmEnabled && !string.IsNullOrWhiteSpace(settings.OpenRouterApiKey)
+                ? new OpenRouterConfig(settings.OpenRouterApiKey.Trim(), settings.OpenRouterModel.Trim())
+                : null);
+        ITooltipReader reader = new OpenRouterTooltipReader(llmClient, new LocalOcrTooltipReader(ocr));
 
         CapturePipeline pipeline = new(_tracker, reader, store);
         _coordinator.FrameArrived += pipeline.OnFrame; // drives the detection session
@@ -57,7 +66,8 @@ public partial class App : Application
             new RegionRatios(settings.TrackerX0, settings.TrackerY0, settings.TrackerX1, settings.TrackerY1),
             new RegionRatios(settings.CompletionX0, settings.CompletionY0, settings.CompletionX1, settings.CompletionY1),
             new RegionRatios(settings.ChatX0, settings.ChatY0, settings.ChatX1, settings.ChatY1),
-            new RegionRatios(settings.CharacterX0, settings.CharacterY0, settings.CharacterX1, settings.CharacterY1));
+            new RegionRatios(settings.CharacterX0, settings.CharacterY0, settings.CharacterX1, settings.CharacterY1),
+            new OpenRouterRunReader(llmClient));
         runPipeline.SetEnabled(settings.RunTrackingEnabled);
         _coordinator.FrameArrived += runPipeline.OnFrame;
 

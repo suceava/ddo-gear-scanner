@@ -12,9 +12,9 @@ namespace DdoGearScanner.Vision;
 /// </summary>
 public sealed class LocalOcrTooltipReader : ITooltipReader
 {
-    private readonly LocalOcr _ocr;
+    private readonly IOcrEngine _ocr;
 
-    public LocalOcrTooltipReader(LocalOcr ocr) => _ocr = ocr;
+    public LocalOcrTooltipReader(IOcrEngine ocr) => _ocr = ocr;
 
     public string BackendName => "Local OCR";
     public bool IsAvailable => _ocr.IsAvailable;

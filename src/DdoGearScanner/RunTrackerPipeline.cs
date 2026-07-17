@@ -36,12 +36,12 @@ public sealed class RunTrackerPipeline
     // count as "entered" — long enough that a one-frame OCR blank can't fake it, short vs a real load.
     private const int LoadDebounce = 3;
     // A blank tracker is tolerated this long (dungeon loads / porting) before treating it as stale
-    // (logout/crash cleanup) — the last-ditch backstop; the primary "left" signal is the name check below.
+    // (logout/crash cleanup) — a backstop; the primary "left" signal is the quest-name match below.
     private const long StaleEmptyMs = 5 * 60 * 1000;
-    // "You left the dungeon" fires only after this many consecutive non-blank reads whose header ISN'T
-    // this run's quest — the header intermittently drops to an objective line, so one garbled read (or a
-    // brief internal transition) must not trip it. ~300ms/read, so this is a couple of sustained seconds.
-    private const int LeftDebounce = 8;
+    // "You left" fires only after this many consecutive non-blank reads whose tracker lines DON'T match the
+    // run's quest name. Set generously: the ornate title reads well but can drop to objective-only frames
+    // for a few seconds (combat FX over the panel), which must not trip a false leave. ~3.3 reads/s.
+    private const int LeftDebounce = 15;
     // A run must last at least this long before a chat "Adventure Completed" can finish it — guards against
     // a stale completion message still scrolled in the chat instantly finishing a just-started run.
     private const double MinRunSeconds = 12;
@@ -64,6 +64,9 @@ public sealed class RunTrackerPipeline
         "housekundarak", "housephiarlan", "housecannith", "thetwelve", "korthosvillage",
         "korthosisland", "korthos", "stormreach", "eberron", "thehallofheroes", "thewaywardlobster",
         "fatespinner", "theceruleanhills",
+        // High-level town hubs you recall/port back to (extend as needed — towns OCR cleanly, so this
+        // list is the reliable leave-signal; quest names in the tracker do NOT OCR in-dungeon).
+        "eveningstar", "meridia", "wheloon", "whelooncity", "sharn",
     };
 
     private readonly EntryPopupReader _entry;
@@ -110,11 +113,22 @@ public sealed class RunTrackerPipeline
     private string? _lastLoggedName;   // debug: only log a tracker read when it changes
     private QuestEntry? _pendingEntry; // last quest-entry popup seen, awaiting a run to attach to
     private long _pendingEntryTick;
+    // LLM (OpenRouter) escalation state: one LLM read per popup appearance / per character change. The
+    // LLM answer OWNS the static popup facts (name/level/duration) and the character name; the live local
+    // reads keep owning difficulty (the user can change the selection after the LLM snapshot).
+    private string? _llmEntryKey;      // Key(local popup name) already escalated (null = none)
+    private QuestEntry? _llmEntryValue; // the LLM's answer for that popup
+    // Every character key we've escalated (success OR failure) — a SET, not a single slot: local OCR can
+    // alternate between name variants with different keys ("Cleroki" / "CIeroki"), and a single-slot memo
+    // ping-ponged between them, re-calling the LLM every few seconds.
+    private readonly HashSet<string> _llmCharDone = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _llmCharNames = new(StringComparer.Ordinal);   // local key → confirmed name
+    private int _llmCharBusy;          // 1 while an avatar escalation is in flight
     private string? _armedArea;        // the area key you stood in while the popup was up (to detect Enter vs Cancel)
     private string? _shownEntryName;   // the quest name currently shown on the "ready" card (null = not shown)
     private bool _leftPromptActive;    // the "you left the dungeon — pause/cancel/keep going?" banner is showing
     private bool _leftDismissed;       // user chose "keep going" — suppress re-prompting until back inside
-    private int _leftTicks;            // consecutive non-blank tracker reads whose header ISN'T this run's quest
+    private int _leftTicks;            // consecutive non-blank reads whose tracker lines DON'T match the quest
 
     /// <summary>Raised when a run is written to the store (completed or abandoned).</summary>
     public event Action<RunRecord>? RunFinalized;
@@ -135,7 +149,7 @@ public sealed class RunTrackerPipeline
     public RunTrackerPipeline(
         EntryPopupReader entry, QuestTrackerReader tracker, ChatLogReader chat, CharacterReader avatar, RunStore store,
         Func<(string? Id, int? Level)> character, RegionRatios trackerRegion, RegionRatios completionRegion,
-        RegionRatios chatRegion, RegionRatios avatarRegion)
+        RegionRatios chatRegion, RegionRatios avatarRegion, OpenRouterRunReader? llm = null)
     {
         _entry = entry;
         _tracker = tracker;
@@ -147,7 +161,10 @@ public sealed class RunTrackerPipeline
         _completionRegion = completionRegion;
         _chatRegion = chatRegion;
         _avatarRegion = avatarRegion;
+        _llm = llm;
     }
+
+    private readonly OpenRouterRunReader? _llm;
 
     public bool Enabled => _enabled;
     public RunRecord? Current { get { lock (_lock) { return _current; } } }
@@ -368,7 +385,11 @@ public sealed class RunTrackerPipeline
                 QuestEntry? entry = null;
                 string compRaw = string.Empty;
                 if (readCompletion && !compCrop.Empty())
+                {
                     entry = _entry.Read(compCrop, out compRaw);
+                    // Event escalation: a popup is up → one LLM read of the same crop (deduped per popup).
+                    if (entry is not null) MaybeLlmEntry(entry, compCrop);
+                }
 
                 CharacterInfo? avatar = null;
                 string avatarRaw = string.Empty;
@@ -376,6 +397,8 @@ public sealed class RunTrackerPipeline
                 {
                     avatar = _avatar.Read(avatarCrop, out avatarRaw);
                     if (dump) Log($"char-parse: name=\"{avatar?.Name}\" lvl={avatar?.Level?.ToString() ?? "?"}");
+                    // Event escalation: a (new) character is on screen → one LLM read per character change.
+                    if (avatar is not null && !string.IsNullOrWhiteSpace(avatar.Name)) MaybeLlmAvatar(avatar, avatarCrop);
                 }
 
                 // Completion fires only on a NEWLY-ARRIVED "Adventure Completed" line — detected by the
@@ -436,6 +459,15 @@ public sealed class RunTrackerPipeline
             if (!compCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "completion.png"), compCrop);
             if (!chatCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "chat.png"), chatCrop);
             if (!avatarCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "character.png"), avatarCrop);
+            // Corpus mode: keep a timestamped copy of each tracker crop (labelled with what Windows OCR
+            // read) so we accumulate real in-dungeon ornate-title samples to bake OCR engines off against.
+            if (AppSettings.Instance.DebugSaveTrackerCrops && !trackerCrop.Empty())
+            {
+                string corpus = Path.Combine(dir, "tracker-corpus");
+                Directory.CreateDirectory(corpus);
+                string safe = new string((questName ?? "none").Where(char.IsLetterOrDigit).ToArray());
+                Cv2.ImWrite(Path.Combine(corpus, $"{DateTime.Now:HHmmss}_{safe}.png"), trackerCrop);
+            }
             Log($"dump: tracker=\"{questName ?? "(none)"}\" completion=<<{compRaw.Replace("\n", " | ")}>> chat=<<{chatRaw.Replace("\n", " | ")}>> char=<<{avatarRaw.Replace("\n", " | ")}>>");
         }
         catch (Exception ex) { Log($"dump error {ex.GetType().Name}: {ex.Message}"); }
@@ -465,7 +497,10 @@ public sealed class RunTrackerPipeline
             if (chatXp is not null) _runXp = chatXp;   // keep the freshest chat XP for the active run
             if (avatar is not null)                    // cache the latest character name/level for run-start stamping
             {
-                if (!string.IsNullOrWhiteSpace(avatar.Name)) _detectedName = avatar.Name;
+                // The LLM-confirmed name is authoritative for that character — local OCR jitter (a stray
+                // quote etc.) must not clobber it. A DIFFERENT character (new key) goes back to local.
+                if (!string.IsNullOrWhiteSpace(avatar.Name))
+                    _detectedName = _llmCharNames.TryGetValue(Key(avatar.Name), out string? confirmed) ? confirmed : avatar.Name;
                 if (avatar.Level is not null) _detectedLevel = avatar.Level;
             }
 
@@ -482,6 +517,11 @@ public sealed class RunTrackerPipeline
                     entry = entry with { Difficulty = prev.Difficulty };
                 if (!string.Equals(entry.Difficulty, _pendingEntry?.Difficulty, StringComparison.Ordinal))
                     Log($"difficulty: {entry.Difficulty ?? "?"}");
+                // An LLM answer for THIS popup owns the static facts (name/level/duration) — a fresh local
+                // read must not clobber them. Difficulty stays LIVE-local (the user can re-click after the
+                // LLM snapshot); the LLM's difficulty only backs up a local miss.
+                if (_llmEntryValue is { } ai && Key(entry.Name) == _llmEntryKey)
+                    entry = new QuestEntry(ai.Name, ai.QuestLevel ?? entry.QuestLevel, entry.Difficulty ?? ai.Difficulty, ai.Duration ?? entry.Duration);
                 _pendingEntry = entry;
                 _pendingEntryTick = nowTick;
                 _armedArea = Key(name);   // the area you're standing in while choosing (the "outside")
@@ -495,25 +535,21 @@ public sealed class RunTrackerPipeline
             }
             else if (_current is { } cur)
             {
-                // "Left the dungeon" = the tracker no longer shows THIS run's quest. The panel header is the
-                // quest name while you're in the instance and the ZONE name once you leave — so we fuzzy-match
-                // the tracker against the run's (clean, popup-sourced) quest name instead of consulting a zone
-                // whitelist. A blank/garbled tracker is NOT leaving (dungeon loads / porting blank it); we
-                // tolerate blank indefinitely, with the long empty-timeout purely as stale cleanup.
+                // "Left the dungeon" = the tracker no longer shows THIS run's quest. The quest panel's ornate
+                // TITLE is the quest name in-instance and the ZONE name once you leave — and it DOES OCR (the
+                // earlier failure was the calibrated region cutting the title off, not the engine). So match
+                // the run's clean (popup-sourced) name against every tracker line, fuzzy (ornate font is
+                // noisy), debounced (title can drop to objective-only frames briefly). A blank tracker is
+                // loading/porting, never "left". isHub is a harmless early trigger for known towns; stale is
+                // last-ditch cleanup.
                 if (name is null) { if (_emptySinceTick == 0) _emptySinceTick = nowTick; }
                 else _emptySinceTick = 0;
                 bool stale = _emptySinceTick != 0 && nowTick - _emptySinceTick > StaleEmptyMs;
-
-                // Debounced name check: count consecutive non-blank reads whose header isn't our quest. The
-                // header intermittently drops to an objective line, so a match on ANY line (checked in
-                // TrackerShowsQuest) resets the counter; a sustained streak of mismatches = a different zone.
                 bool weakName = Key(cur.DungeonName).Length < 4;   // manual run w/ no usable name → can't match
                 if (name is not null && !weakName)
                     _leftTicks = TrackerShowsQuest(tracker, cur.DungeonName) ? 0 : _leftTicks + 1;
                 bool leftByName = !weakName && _leftTicks >= LeftDebounce;
-                // Fallback only when the run has no matchable name (manual start): the old hub signal. Stale
-                // is the last-ditch cleanup either way.
-                bool left = leftByName || (weakName && isHub) || stale;
+                bool left = leftByName || isHub || stale;
 
                 if (!cur.Completed && IsWilderness(tracker))
                 {
@@ -678,6 +714,112 @@ public sealed class RunTrackerPipeline
         if (leftPromptShow is { } show) LeftPromptChanged?.Invoke(show);
     }
 
+    // ---- LLM (OpenRouter) event escalation ----
+
+    /// <summary>Fire ONE LLM read for this popup appearance (deduped by the local name's key). The LLM's
+    /// answer owns name/level/duration; difficulty stays live-local (the user can re-click after the
+    /// snapshot). Result lands asynchronously via <see cref="ApplyLlmEntry"/>.</summary>
+    private void MaybeLlmEntry(QuestEntry localEntry, OpenCvMat popupCrop)
+    {
+        if (_llm is not { IsEnabled: true }) return;
+        string key = Key(localEntry.Name);
+        if (key.Length < 3) return;
+        lock (_lock)
+        {
+            if (string.Equals(_llmEntryKey, key, StringComparison.Ordinal)) return;   // this popup was already escalated
+            _llmEntryKey = key;
+            _llmEntryValue = null;
+        }
+        OpenCvMat crop = popupCrop.Clone();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                QuestEntry? ai = await _llm.ReadEntryAsync(crop).ConfigureAwait(false);
+                if (ai is not null) ApplyLlmEntry(ai, key);
+                else Log($"llm-entry: no result for \"{localEntry.Name}\"");
+            }
+            catch (Exception ex) { Log($"llm-entry error: {ex.Message}"); }
+            finally { crop.Dispose(); }
+        });
+    }
+
+    private void ApplyLlmEntry(QuestEntry ai, string forKey)
+    {
+        RunRecord? updatedRun = null;
+        QuestEntry? updatedPending = null;
+        lock (_lock)
+        {
+            if (!string.Equals(_llmEntryKey, forKey, StringComparison.Ordinal)) return;   // a newer popup superseded this
+            _llmEntryValue = ai;
+            Log($"llm-entry: \"{ai.Name}\" L{ai.QuestLevel?.ToString() ?? "?"} diff={ai.Difficulty ?? "?"} dur={ai.Duration ?? "?"}");
+
+            // The popup may still be pending, or its run may already be live — correct whichever matches.
+            if (_pendingEntry is { } pe && Key(pe.Name) == forKey)
+            {
+                _pendingEntry = new QuestEntry(ai.Name, ai.QuestLevel ?? pe.QuestLevel, pe.Difficulty ?? ai.Difficulty, ai.Duration ?? pe.Duration);
+                updatedPending = _pendingEntry;
+                _shownEntryName = null;   // force the READY card to re-render with corrected fields
+            }
+            if (_current is { Completed: false, Edited: false } cur && Key(cur.DungeonName) == forKey)
+            {
+                _current = cur with
+                {
+                    DungeonName = ai.Name,
+                    QuestLevel = ai.QuestLevel ?? cur.QuestLevel,
+                    Difficulty = cur.Difficulty ?? ai.Difficulty,
+                    QuestDuration = ai.Duration ?? cur.QuestDuration,
+                };
+                updatedRun = _current;
+            }
+        }
+        if (updatedRun is not null) CurrentChanged?.Invoke(updatedRun);
+        else if (updatedPending is not null) EntryHeld?.Invoke(updatedPending);
+    }
+
+    /// <summary>Fire ONE LLM read when a character (by local OCR name key) hasn't been LLM-confirmed yet —
+    /// so each login/relog costs one call, and OCR jitter (absorbed by Key's normalization) costs none.</summary>
+    private void MaybeLlmAvatar(CharacterInfo local, OpenCvMat avatarCrop)
+    {
+        if (_llm is not { IsEnabled: true }) return;
+        string key = Key(local.Name);
+        if (key.Length < 3) return;
+        lock (_lock)
+        {
+            if (_llmCharDone.Contains(key)) return;                                  // already escalated (ok or failed)
+            if (Interlocked.CompareExchange(ref _llmCharBusy, 1, 0) == 1) return;    // one in flight at a time
+        }
+        OpenCvMat crop = avatarCrop.Clone();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                CharacterInfo? ai = await _llm.ReadCharacterAsync(crop).ConfigureAwait(false);
+                lock (_lock) _llmCharDone.Add(key);   // success or not, never re-pay for this key
+                if (ai is null || string.IsNullOrWhiteSpace(ai.Name)) { Log("llm-char: no result"); return; }
+                RunRecord? updatedRun = null;
+                lock (_lock)
+                {
+                    string confirmed = ai.Name.Trim();
+                    _llmCharNames[key] = confirmed;
+                    _llmCharNames[Key(confirmed)] = confirmed;   // local may later read the TRUE spelling's key
+                    _llmCharDone.Add(Key(confirmed));
+                    _detectedName = confirmed;
+                    if (ai.Level is not null) _detectedLevel = ai.Level;
+                    Log($"llm-char: \"{confirmed}\" lvl={ai.Level?.ToString() ?? "?"}");
+                    if (_current is { Completed: false, Edited: false } cur)
+                    {
+                        _current = cur with { CharacterName = confirmed, CharacterLevel = ai.Level ?? cur.CharacterLevel };
+                        updatedRun = _current;
+                    }
+                }
+                if (updatedRun is not null) CurrentChanged?.Invoke(updatedRun);
+            }
+            catch (Exception ex) { Log($"llm-char error: {ex.Message}"); }
+            finally { crop.Dispose(); Interlocked.Exchange(ref _llmCharBusy, 0); }
+        });
+    }
+
     // ---- helpers (all called under _lock) ----
 
     private RunRecord FinalizeCurrent(string compRaw)
@@ -739,9 +881,9 @@ public sealed class RunTrackerPipeline
            && (name.Contains("slayer", StringComparison.OrdinalIgnoreCase)
                || name.Contains("menace", StringComparison.OrdinalIgnoreCase));
 
-    // "Does the tracker still show THIS run's quest?" The header is the quest name in-instance; once you
-    // leave it becomes the zone name. Checked across ALL lines (the header intermittently drops to an
-    // objective read) with a fuzzy match — the ornate title font OCRs noisily.
+    // "Does the tracker still show THIS run's quest?" The ornate title is the quest name in-instance; once
+    // you leave it becomes the zone name. Checked across ALL lines (the title can drop to an objective read
+    // some frames; the over-extended region may also carry extra lines) with a fuzzy match.
     private static bool TrackerShowsQuest(TrackerStatus t, string questName)
     {
         string q = Key(questName);
@@ -754,7 +896,7 @@ public sealed class RunTrackerPipeline
     }
 
     // Fuzzy "these name the same quest": normalize to alnum-lowercase, accept containment (a noisier read
-    // wrapping the name, or a clean name inside it) or ≤40% edit distance (OCR of the title font is rough).
+    // wrapping the name, or a clean name inside a longer line) or ≤40% edit distance (ornate-font OCR).
     private static bool NameSimilar(string? line, string qKey)
     {
         string k = Key(line);
@@ -762,6 +904,7 @@ public sealed class RunTrackerPipeline
         if (k.Contains(qKey) || qKey.Contains(k)) return true;
         return Levenshtein(k, qKey) <= Math.Max(k.Length, qKey.Length) * 0.40;
     }
+
 
     // Newly-arrived chat lines, found by the append-only SHIFT: the chat is a scrolling log, so when new
     // lines appear the old ones move up by exactly that many rows. We find the smallest shift N at which

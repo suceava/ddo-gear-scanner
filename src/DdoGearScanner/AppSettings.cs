@@ -67,6 +67,20 @@ public sealed class AppSettings : INotifyPropertyChanged
     private bool _autoOpenWiki;
     public bool AutoOpenWiki { get => _autoOpenWiki; set => Set(ref _autoOpenWiki, value); }
 
+    // ---- AI reading (OpenRouter) — USER settings, app-wide. When enabled, EVENT reads (gear tooltip
+    // captures, the quest-entry popup, the character avatar) go through an LLM vision model and override
+    // the local-OCR result when they land; the 3/sec tracker+chat polling always stays on local OCR
+    // (cost/latency). Key is stored plaintext by explicit user choice. Off by default.
+    private bool _llmEnabled;
+    public bool LlmEnabled { get => _llmEnabled; set => Set(ref _llmEnabled, value); }
+
+    private string _openRouterApiKey = string.Empty;
+    public string OpenRouterApiKey { get => _openRouterApiKey; set => Set(ref _openRouterApiKey, value); }
+
+    // OpenRouter model id. Default = a cheap, fast vision model; user-editable free text.
+    private string _openRouterModel = "google/gemini-2.5-flash";
+    public string OpenRouterModel { get => _openRouterModel; set => Set(ref _openRouterModel, value); }
+
     // Stacking-matrix window bounds (NaN => center on first open).
     private double _matrixLeft = double.NaN;
     public double MatrixLeft { get => _matrixLeft; set => Set(ref _matrixLeft, value); }
@@ -107,6 +121,11 @@ public sealed class AppSettings : INotifyPropertyChanged
     // Show a live panel of the OCR'd chat text (with newly-detected lines highlighted).
     private bool _debugShowChatText;
     public bool DebugShowChatText { get => _debugShowChatText; set => Set(ref _debugShowChatText, value); }
+
+    // Debug: save a timestamped copy of the quest-tracker crop each dump, building a corpus of real
+    // in-dungeon ornate-title samples for OCR tuning (e.g. the future LLM reader). Off by default.
+    private bool _debugSaveTrackerCrops;
+    public bool DebugSaveTrackerCrops { get => _debugSaveTrackerCrops; set => Set(ref _debugSaveTrackerCrops, value); }
 
     // Debug Diagnostics window bounds (NaN => center on first open).
     private double _debugLeft = double.NaN;
@@ -180,6 +199,9 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.WindowMaximized = loaded.WindowMaximized;
                     s.ActivePage = loaded.ActivePage ?? "Home";
                     s.AutoOpenWiki = loaded.AutoOpenWiki;
+                    s.LlmEnabled = loaded.LlmEnabled;
+                    s.OpenRouterApiKey = loaded.OpenRouterApiKey ?? string.Empty;
+                    s.OpenRouterModel = string.IsNullOrWhiteSpace(loaded.OpenRouterModel) ? s.OpenRouterModel : loaded.OpenRouterModel;
                     s.MatrixLeft = loaded.MatrixLeft;
                     s.MatrixTop = loaded.MatrixTop;
                     s.MatrixWidth = loaded.MatrixWidth;
@@ -194,6 +216,7 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.DebugMode = loaded.DebugMode;
                     s.RunDebugOverlay = loaded.RunDebugOverlay;
                     s.DebugShowChatText = loaded.DebugShowChatText;
+                    s.DebugSaveTrackerCrops = loaded.DebugSaveTrackerCrops;
                     s.DebugLeft = loaded.DebugLeft;
                     s.DebugTop = loaded.DebugTop;
                     s.DebugWidth = loaded.DebugWidth;

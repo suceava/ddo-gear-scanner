@@ -145,12 +145,21 @@ public sealed class CapturePipeline
                 GearItem? item = read.Item;
                 if (slot is EquipSlot s && item is not null) item = item with { Slot = s };
 
-                // Named-item match: if the OCR'd name confidently matches a DDOBuilder catalog item,
-                // swap in its clean mods (the name reads far more reliably than a dozen mod lines).
+                // Named-item match against the DDOBuilder catalog — but HOW MUCH to take from it depends
+                // on who read the tooltip:
+                //  - Local OCR: swap in the catalog's clean mods wholesale (the name reads far more
+                //    reliably than a dozen mod lines; catalog data rescues garbage parses).
+                //  - LLM (OpenRouter): the tooltip read is MORE accurate than the catalog — the catalog
+                //    flattens names ("Efficient Metamagic - Extend II" → "Efficient Extend II",
+                //    "Illusion Focus +2" → "Illusion +0") and can match the WRONG VARIANT of an item,
+                //    clobbering real rolled values. Canonicalize the item NAME only; keep the LLM's mods.
                 if (item is not null && !string.IsNullOrWhiteSpace(item.Name))
                 {
                     ItemMatch? match = NamedItemMatcher.TryMatch(item.Name, item.Slot, item.MinimumLevel);
-                    if (match is { HighConfidence: true }) item = NamedItemMatcher.Apply(item, match.Item);
+                    if (match is { HighConfidence: true })
+                        item = read.Backend == "OpenRouter"
+                            ? item with { Name = match.Item.Name, IsLikelyNamed = true, Matched = true }
+                            : NamedItemMatcher.Apply(item, match.Item);
                 }
 
                 bool ok = item is not null && (!string.IsNullOrWhiteSpace(item.Name) || item.Mods.Count > 0);

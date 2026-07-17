@@ -11,7 +11,7 @@ internal static class RunVision
 {
     /// <summary>OCR with an adaptive scale: small crops upscale 2x (tiny text), big ones stay native
     /// (a 4K upscale takes ~6s and starves the pipeline). Used to LOCATE things cheaply on a big sweep.</summary>
-    public static IReadOnlyList<OcrLine> Read(LocalOcr ocr, OpenCvMat bgr)
+    public static IReadOnlyList<OcrLine> Read(IOcrEngine ocr, OpenCvMat bgr)
     {
         if (bgr.Empty()) return Array.Empty<OcrLine>();
         double scale = bgr.Width <= 900 ? 2.0 : bgr.Width <= 1500 ? 1.5 : 1.0;
@@ -21,7 +21,7 @@ internal static class RunVision
     /// <summary>OCR at a fixed scale. Used for the second pass: once a panel is located, its small crop is
     /// read enlarged (e.g. 3x) so small text — the quest level's digits — is crisp. Boxes come back in the
     /// scaled crop's coordinates, which is fine since the popup parser works in relative geometry.</summary>
-    public static IReadOnlyList<OcrLine> ReadAt(LocalOcr ocr, OpenCvMat bgr, double scale)
+    public static IReadOnlyList<OcrLine> ReadAt(IOcrEngine ocr, OpenCvMat bgr, double scale)
     {
         if (bgr.Empty()) return Array.Empty<OcrLine>();
 
@@ -60,8 +60,8 @@ internal static class RunVision
 /// </summary>
 public sealed class EntryPopupReader
 {
-    private readonly LocalOcr _ocr;
-    public EntryPopupReader(LocalOcr ocr) => _ocr = ocr;
+    private readonly IOcrEngine _ocr;
+    public EntryPopupReader(IOcrEngine ocr) => _ocr = ocr;
 
     public bool IsAvailable => _ocr.IsAvailable;
 
@@ -203,8 +203,8 @@ public sealed class EntryPopupReader
 /// </summary>
 public sealed class ChatLogReader
 {
-    private readonly LocalOcr _ocr;
-    public ChatLogReader(LocalOcr ocr) => _ocr = ocr;
+    private readonly IOcrEngine _ocr;
+    public ChatLogReader(IOcrEngine ocr) => _ocr = ocr;
 
     public bool IsAvailable => _ocr.IsAvailable;
 
@@ -219,8 +219,8 @@ public sealed class ChatLogReader
 /// </summary>
 public sealed class CharacterReader
 {
-    private readonly LocalOcr _ocr;
-    public CharacterReader(LocalOcr ocr) => _ocr = ocr;
+    private readonly IOcrEngine _ocr;
+    public CharacterReader(IOcrEngine ocr) => _ocr = ocr;
 
     public bool IsAvailable => _ocr.IsAvailable;
 
@@ -274,8 +274,8 @@ public readonly record struct TrackerStatus(string? Name, bool Completed, IReadO
 /// </summary>
 public sealed class QuestTrackerReader
 {
-    private readonly LocalOcr _ocr;
-    public QuestTrackerReader(LocalOcr ocr) => _ocr = ocr;
+    private readonly IOcrEngine _ocr;
+    public QuestTrackerReader(IOcrEngine ocr) => _ocr = ocr;
 
     public bool IsAvailable => _ocr.IsAvailable;
 

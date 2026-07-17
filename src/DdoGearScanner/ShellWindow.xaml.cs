@@ -92,6 +92,17 @@ public partial class ShellWindow : Window
 
     private void GlobalMenu_Click(object sender, RoutedEventArgs e) => GlobalMenuPopup.IsOpen = true;
 
+    private SettingsWindow? _settingsWindow;
+
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        GlobalMenuPopup.IsOpen = false;
+        if (_settingsWindow is not null) { _settingsWindow.Activate(); return; }
+        _settingsWindow = new SettingsWindow { Owner = this };
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show();
+    }
+
     private DebugSettingsWindow? _debugWindow;
 
     private void DebugSettings_Click(object sender, RoutedEventArgs e)

@@ -55,9 +55,18 @@ internal static class WindowChrome
     [DllImport("user32.dll")] private static extern bool SetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
     [DllImport("user32.dll")] private static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
 
+    // Windows currently mid-restore: persistence is paused for them so the DPI dance below can't
+    // overwrite the good saved bounds with mangled intermediate ones.
+    private static readonly HashSet<Window> Restoring = new();
+
     /// <summary>Restore a window's saved placement (position + size + maximized). NaN / non-positive
     /// values mean "nothing saved" → keep the XAML default. The OS clamps the saved rect onto a
-    /// currently-visible monitor, so a stale position can never strand the window off-screen.</summary>
+    /// currently-visible monitor, so a stale position can never strand the window off-screen.
+    /// MIXED-DPI monitors need a second pass: the placement is applied at SourceInitialized while the
+    /// window still sits on the monitor it was created on — moving it to a monitor with a different DPI
+    /// makes WPF "rescale" the freshly-restored size by the DPI ratio (observed: restored 1917x1340
+    /// shrank by exactly 1.5x crossing a 150%→100% boundary). Re-applying the SAME physical rect after
+    /// first render lands exactly, because the window is already ON the target monitor by then.</summary>
     public static void ApplyBounds(Window w, double left, double top, double width, double height, bool maximized)
     {
         if (double.IsNaN(left) || double.IsNaN(top) || double.IsNaN(width) || double.IsNaN(height)
@@ -71,15 +80,34 @@ internal static class WindowChrome
             WINDOWPLACEMENT wp = default;
             wp.length = Marshal.SizeOf<WINDOWPLACEMENT>();
             wp.flags = 0;
-            wp.showCmd = maximized ? SW_SHOWMAXIMIZED : SW_SHOWNORMAL;
+            // ALWAYS restore the normal rect first — never maximize in this pass. Maximizing while the
+            // window still sits on its creation monitor maximizes THERE (the classic "opens maximized on
+            // the wrong monitor" bug); the normal rect is what moves it to the right monitor.
+            wp.showCmd = SW_SHOWNORMAL;
             wp.ptMinPosition = new POINT(-1, -1);
             wp.ptMaxPosition = new POINT(-1, -1);
             wp.rcNormalPosition = new RECT { Left = (int)left, Top = (int)top, Right = (int)(left + width), Bottom = (int)(top + height) };
             SetWindowPlacement(hwnd, ref wp);
         }
 
+        Restoring.Add(w);
+        w.Closed += (_, _) => Restoring.Remove(w);   // never-strand cleanup if the window dies mid-restore
+
         if (new WindowInteropHelper(w).Handle != IntPtr.Zero) Apply();
         else w.SourceInitialized += (_, _) => Apply();
+
+        // Second pass after first render: same physical rect, but no monitor/DPI transition this time —
+        // then, once the window is provably on the right monitor, maximize if that's how it was left.
+        // Persistence resumes only when the dispatcher goes IDLE: WPF keeps nudging the window (DPI /
+        // layout adjustments) for several ticks after ContentRendered, and persisting any of those
+        // transitional rects made the saved bounds decay a little on every launch.
+        w.ContentRendered += (_, _) =>
+        {
+            Apply();
+            if (maximized) w.WindowState = WindowState.Maximized;
+            w.Dispatcher.BeginInvoke(new Action(() => Restoring.Remove(w)),
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        };
     }
 
     /// <summary>Persist a window's placement continuously (on move / resize / maximize) while it's
@@ -90,6 +118,7 @@ internal static class WindowChrome
     {
         void Save()
         {
+            if (Restoring.Contains(w)) return;   // mid-restore bounds are transient/DPI-mangled — never persist them
             IntPtr hwnd = new WindowInteropHelper(w).Handle;
             if (hwnd == IntPtr.Zero) return;
             WINDOWPLACEMENT wp = default;

@@ -47,6 +47,7 @@
                     <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderGold}" BorderThickness="1"
                             CornerRadius="4" Padding="4" MinWidth="200">
                         <StackPanel>
+                            <Button Style="{StaticResource MenuItemButton}" Content="Settings…" Click="Settings_Click" />
                             <Button Style="{StaticResource MenuItemButton}" Content="Debug Settings…" Click="DebugSettings_Click" />
                         </StackPanel>
                     </Border>

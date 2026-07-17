@@ -5,10 +5,11 @@ namespace DdoGearScanner;
 /// <summary>Display order and in-game ("Equips to:") labels for the equipment slots.</summary>
 public static class SlotInfo
 {
-    /// <summary>Head-to-toe order for the loadout sheet.</summary>
+    /// <summary>Loadout-sheet order — follows the in-game paper-doll clockwise (Eyes → Head → Neck →
+    /// Trinket → Cloak → …), so the sheet reads in the same order you hover the slots.</summary>
     public static readonly EquipSlot[] DisplayOrder =
     {
-        EquipSlot.Helmet, EquipSlot.Goggles, EquipSlot.Necklace, EquipSlot.Trinket, EquipSlot.Cloak,
+        EquipSlot.Goggles, EquipSlot.Helmet, EquipSlot.Necklace, EquipSlot.Trinket, EquipSlot.Cloak,
         EquipSlot.Armor, EquipSlot.Bracers, EquipSlot.Gloves, EquipSlot.Belt, EquipSlot.Boots,
         EquipSlot.Ring1, EquipSlot.Ring2, EquipSlot.MainHand, EquipSlot.OffHand, EquipSlot.Quiver,
     };

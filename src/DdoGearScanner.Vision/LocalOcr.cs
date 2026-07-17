@@ -11,12 +11,12 @@ namespace DdoGearScanner.Vision;
 public sealed record OcrLine(string Text, OpenCvRect Bbox);
 
 /// <summary>
-/// Thin wrapper over the built-in Windows.Media.Ocr engine. Adapted verbatim from
-/// pg-loot-master's SidebarOcr — generalized to OCR any BGR crop (a gear tooltip here).
-/// No install needed; the engine ships with Windows. <see cref="IsAvailable"/> is false
-/// only if no OCR language pack is present.
+/// The built-in Windows.Media.Ocr backend (one <see cref="IOcrEngine"/> implementation). Adapted from
+/// pg-loot-master's SidebarOcr — generalized to OCR any BGR crop. No install needed; the engine ships with
+/// Windows. <see cref="IsAvailable"/> is false only if no OCR language pack is present. Reads plain text
+/// well but can't read DDO's ornate quest-title font in-dungeon — see the OCR bake-off.
 /// </summary>
-public sealed class LocalOcr
+public sealed class LocalOcr : IOcrEngine
 {
     private readonly OcrEngine? _engine;
 
@@ -25,6 +25,7 @@ public sealed class LocalOcr
         _engine = OcrEngine.TryCreateFromUserProfileLanguages();
     }
 
+    public string Name => "Windows";
     public bool IsAvailable => _engine is not null;
 
     public IReadOnlyList<OcrLine> Recognize(OpenCvMat bgrCrop)
