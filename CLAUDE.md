@@ -41,9 +41,26 @@ character; matches live at 1.000). `InventoryLocator` template-matches `assets/i
 rag-doll anchor. `CalibrationController`: "Calibrate slots" locates the rag-doll ONCE (a slot's
 tooltip would cover it), then the user hovers each slot clockwise (Head→Neck→Trinket→Cloak→Waist→
 Ring2→Hands→Feet→Ring1→Wrists→Armor→Eyes, then MainHand/OffHand/Quiver — in-game "Equips to:"
-labels) and presses Insert. At capture the pipeline caches the anchor from CLEAN frames
-(`LastFrameClean`), tags the item with its slot, and SKIPS captures where the inventory is open but
-the cursor isn't on a slot (ignores bag items). `SlotInfo` holds the slot order + labels.
+labels) and presses Insert. At capture the pipeline re-locates the anchor cheaply (a small window
+around the last position; full-frame sweep only every few misses), tags the item with its slot, and
+SKIPS captures where the inventory is open but the cursor isn't on a slot (ignores bag items).
+`SlotInfo` holds the slot order + labels (paper-doll clockwise: Eyes before Head).
+
+**Capture feel + reliability (all in `CapturePipeline` + `OverlayWindow`):**
+- **Slot markers** — with a session on, gold circles are drawn on the calibrated slot points (from the
+  live anchor) so the user can align the inventory window; they FADE after ~4s and re-show on any anchor
+  move. If the paper-doll can't be located, a red on-game hint shows the best match score (so the old
+  SILENT failure — moved window / different UI scale — is visible). Toggle: `ShowSlotMarkers` user setting.
+- **Border only on a real slot** — the instant gold highlight fires *after* slot resolution, so a bag
+  item / non-slot never flashes a border. Highlight shows at DETECTION (not after the slow LLM read).
+- **`RegionDetected`/`CaptureStarted`/`Completed` events** drive: instant border → sheet row + detail
+  panel go "⏳ processing" with the fresh screenshot → item fills in when the read lands. A stale outcome
+  (user already on the next tooltip) doesn't redraw an old border (`_captureSeq`).
+- **Water/scenery rejected** — a candidate must be pixel-STATIC frame-to-frame (`TooltipChangeDetector`
+  animated-region check); shimmering docks/water churn and are dropped. Detection is ROI-constrained to
+  the calibration area so frame-edge motion can't feed the differ.
+- **Backlog cap** — at most `MaxReadsInFlight` (3) concurrent reads; a burst drops rather than queues, so
+  it can't make every later tooltip late.
 
 **Parsing** (`TooltipTextParser`): skips a "CURRENTLY EQUIPPED" header, gathers a multi-line name,
 stops at the known item-type line (Heavy Armor / Tower Shield / Bastard Sword (one-handed) —
@@ -134,8 +151,17 @@ a ✓/↩ status glyph, and a hover-reveal ✕ delete. `runs.json` persists ever
 A global `AppSettings.DebugMode` toggle gates everything. `DebugSettingsWindow` (shell ☰ menu) is
 data-bound to `AppSettings`. Two kinds, deliberately separated: **spatial** debug (calibrated region
 borders) draws on the click-through game `OverlayWindow`; **data** debug (live chat OCR) lives in the
-movable `DebugDiagnosticsWindow`. Region crops + OCR text dump to `%APPDATA%\DdoGearScanner\run-debug\`
-every ~5s (tracker/completion/chat/character .png + a log line) — that's how the regions/parsers get tuned.
+movable `DebugDiagnosticsWindow`.
+
+**Crop dumps (screenshot-to-disk for tuning) are per-feature, OFF by default, gated under DebugMode, and
+paths live in ONE place (`DebugPaths`).** Consistent scheme: everything under `%APPDATA%\DdoGearScanner\
+debug\` — `debug\gear\` (one image per gear capture — `DebugDumpGearCrops`, the only unbounded one) and
+`debug\run\` (the run tracker's tracker/completion/chat/character/popup images, overwritten each ~5s —
+`DebugDumpRunRegions`). **Unchecking a box wipes that folder** (App wires the settings event → `DebugPaths.
+Clear*`); old inconsistently-named folders (`debug-crops`, `run-debug`) are removed once at startup. The
+Vision layer's popup dump obeys the run checkbox via `VisionDebug` (it can't see `AppSettings`). Nothing is
+shared across features — an earlier single `DebugDumpCrops` straddling both, plus a since-removed
+bake-off corpus flag, was the confusing mess this replaced.
 
 **Detection: local Windows OCR for polling; optional LLM (OpenRouter) for EVENT reads.** All OCR goes
 through the `IOcrEngine` seam (a 2026-07 bake-off on real gameplay kept Windows OCR and rejected
@@ -156,7 +182,7 @@ for near-white on the icon.) Label X for every slot is EXTRAPOLATED from the fix
 tier stays a candidate when its label OCR merges ("Casual Normal" as one word) or drops. **Reaper is
 special**: selecting it swaps the icon for a "N Skull" dropdown, so a "Skull" reading = `Reaper N`. It
 carries forward across jittery frames and can show a stale value for a second before settling; the manual
-**Difficulty** buttons on the card are the backstop. Tuned from `run-debug/popup.png` + the `[difficulty=…]
+**Difficulty** buttons on the card are the backstop. Tuned from `debug\run\popup.png` + the `[difficulty=…]
 [white: …]` log line (crop ↔ log verified against the actually-highlighted tier).
 
 **Still on the design-goal list, NOT yet built:**
@@ -212,8 +238,8 @@ dotnet test                 # parser tests (Windows)
 # run: launch the built exe (asInvoker, no UAC). dotnet run also works.
 ```
 
-Debug dumps go to `%APPDATA%\DdoGearScanner\debug-crops\` (`frame-<ts>-c<X>_<Y>.png` with cursor in
-the name, + `crop-*.png`). Persistence: `loadout.json`, `slotmap.json`, `settings.json` in `%APPDATA%`.
+Debug crop dumps go to `%APPDATA%\DdoGearScanner\debug\gear\` (off by default — see Debug system).
+Persistence: `loadout-<id>.json`, `slotmap.json`, `settings.json`, `characters.json`, `runs.json` in `%APPDATA%`.
 
 ## Status & next
 

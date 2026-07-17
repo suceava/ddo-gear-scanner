@@ -55,16 +55,30 @@ public sealed class InventoryLocator
     public int TemplateHeight => _ragdoll.Height;
 
     /// <summary>Rag-doll top-left in frame pixels, or null if not confidently found.</summary>
-    public Point? Locate(OpenCvMat frame)
-    {
-        if (frame.Empty() || frame.Width < _ragdoll.Width || frame.Height < _ragdoll.Height) return null;
+    public Point? Locate(OpenCvMat frame) => Locate(frame, out _);
 
-        using OpenCvMat bgr = EnsureBgr(frame, out OpenCvMat? owned);
+    /// <summary>Like <see cref="Locate(OpenCvMat)"/> but also reports the best match score even on a
+    /// miss (the "why isn't it matching" diagnostic: ~0.1 = doll not visible, mid = renders differently),
+    /// and optionally restricts the search to <paramref name="searchIn"/> — matching a small window
+    /// around the last known anchor costs ~nothing vs a full 4K sweep (which stalls the frame thread
+    /// ~100ms), so the caller can track the window cheaply and full-sweep only on occasional misses.</summary>
+    public Point? Locate(OpenCvMat frame, out double bestScore, Rect? searchIn = null)
+    {
+        bestScore = 0;
+        if (frame.Empty()) return null;
+        Rect area = searchIn is Rect s
+            ? s & new Rect(0, 0, frame.Width, frame.Height)
+            : new Rect(0, 0, frame.Width, frame.Height);
+        if (area.Width < _ragdoll.Width || area.Height < _ragdoll.Height) return null;
+
+        using OpenCvMat view = new(frame, area);
+        using OpenCvMat bgr = EnsureBgr(view, out OpenCvMat? owned);
         using OpenCvMat result = new();
         Cv2.MatchTemplate(bgr, _ragdoll, result, TemplateMatchModes.CCoeffNormed);
         owned?.Dispose();
         Cv2.MinMaxLoc(result, out _, out double maxVal, out _, out Point maxLoc);
-        return maxVal >= _threshold ? maxLoc : null;
+        bestScore = maxVal;
+        return maxVal >= _threshold ? new Point(maxLoc.X + area.X, maxLoc.Y + area.Y) : null;
     }
 
     private static OpenCvMat EnsureBgr(OpenCvMat roi, out OpenCvMat? owned)

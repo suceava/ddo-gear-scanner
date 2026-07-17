@@ -12,6 +12,17 @@
         <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
                 CornerRadius="4" Padding="14,10,14,14" Margin="0,14,0,0">
             <StackPanel>
+                <TextBlock Text="Gear capture" Style="{StaticResource Section}" Margin="0,0,0,2" />
+                <CheckBox Content="Show calibrated slot markers on the game while capture is on"
+                          IsChecked="{Binding ShowSlotMarkers}" Foreground="{StaticResource Parchment}" />
+                <TextBlock Text="Circles mark where the app expects your inventory slots — shown for a few seconds at capture start and whenever the inventory window moves, then they fade so tooltips stay readable. A red message appears if the inventory can't be located (captures would be skipped)."
+                           Foreground="{StaticResource TextMuted}" FontSize="11.5" TextWrapping="Wrap" Margin="22,2,0,0" />
+            </StackPanel>
+        </Border>
+
+        <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
+                CornerRadius="4" Padding="14,10,14,14" Margin="0,12,0,0">
+            <StackPanel>
                 <TextBlock Text="AI reading (OpenRouter)" Style="{StaticResource Section}" Margin="0,0,0,2" />
                 <TextBlock Foreground="{StaticResource TextMuted}" FontSize="11.5" TextWrapping="Wrap" Margin="0,2,0,8"
                            Text="Uses an AI vision model to read gear tooltips, quest-entry popups and your character info — much more accurate than local OCR. Applies app-wide, only at capture moments (a read costs a fraction of a cent); continuous detection stays local and free. Requires an OpenRouter account and API key (openrouter.ai)." />

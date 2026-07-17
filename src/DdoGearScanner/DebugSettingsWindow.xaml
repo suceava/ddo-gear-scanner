@@ -26,8 +26,8 @@
                           IsChecked="{Binding RunDebugOverlay}" IsEnabled="{Binding DebugMode}" />
                 <CheckBox Content="Show detected chat text (live OCR — new lines in green)"
                           IsChecked="{Binding DebugShowChatText}" IsEnabled="{Binding DebugMode}" />
-                <CheckBox Content="Save tracker crops (timestamped, for OCR tuning)"
-                          IsChecked="{Binding DebugSaveTrackerCrops}" IsEnabled="{Binding DebugMode}" />
+                <CheckBox Content="Save region screenshots to disk" ToolTip="Troubleshooting — writes debug\run\ (4 images, overwritten each read)"
+                          IsChecked="{Binding DebugDumpRunRegions}" IsEnabled="{Binding DebugMode}" />
             </StackPanel>
         </Border>
 
@@ -35,7 +35,8 @@
                 CornerRadius="4" Padding="14,10,14,14" Margin="0,12,0,0">
             <StackPanel>
                 <TextBlock Text="Gear Loadout" Style="{StaticResource Section}" Margin="0,0,0,2" />
-                <TextBlock Text="(no debug options yet)" Foreground="{StaticResource TextMuted}" FontSize="11.5" Margin="0,4,0,0" />
+                <CheckBox Content="Save capture screenshots to disk" ToolTip="Troubleshooting — writes debug\gear\ (one image per capture)"
+                          IsChecked="{Binding DebugDumpGearCrops}" IsEnabled="{Binding DebugMode}" />
             </StackPanel>
         </Border>
 

@@ -91,12 +91,53 @@ public partial class GearLoadoutView : UserControl
 
     public void SetStatusText(string text) => Dispatcher.Invoke(() => StatusText.Text = text);
 
+    /// <summary>A tooltip was just captured (read still in flight): show the SHOT + a processing state
+    /// immediately so the (LLM) read latency reads as progress, not a missed capture.</summary>
+    public void OnCaptureStarted(EquipSlot? slot, byte[] png)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            StatusText.Text = "Captured — processing…";
+            BitmapImage? crop = png is { Length: > 0 } ? BitmapFromBytes(png) : null;
+            if (slot is EquipSlot s && _rows.FirstOrDefault(r => r.Slot == s) is SlotRow row)
+            {
+                if (crop is not null) _crops[s] = crop;
+                row.Pending = true;
+                SlotSheet.SelectedItem = row;
+                SlotSheet.ScrollIntoView(row);
+            }
+            // The DETAIL PANEL is where the eye is: show the fresh shot with an explicit processing
+            // state — leaving the previous item's parsed fields under a new screenshot read as
+            // "parsed instantly (and wrong)".
+            ShowProcessing(crop);
+        });
+    }
+
+    /// <summary>Detail panel in "captured, read in flight" state: the fresh screenshot + a processing
+    /// title, with the previous item's fields cleared.</summary>
+    private void ShowProcessing(BitmapImage? crop)
+    {
+        EditButton.Visibility = Visibility.Collapsed;
+        LockButton.Visibility = Visibility.Collapsed;
+        AddButton.Visibility = Visibility.Collapsed;
+        LastName.Text = "⏳ Processing…";
+        LastMeta.Text = "";
+        LastReadInfo.Text = "captured — reading the tooltip";
+        LastBinding.Text = ""; RawText.Text = "";
+        ModsList.ItemsSource = null; AugList.ItemsSource = null; SetList.ItemsSource = null;
+        CropImage.Source = crop;
+    }
+
     public void OnCaptureCompleted(CaptureOutcome outcome)
     {
         Dispatcher.Invoke(() =>
         {
             StatusText.Text = outcome.Message;
-            if (outcome.Item is not GearItem item) return;
+            if (outcome.Item is not GearItem item)
+            {
+                foreach (SlotRow r in _rows) r.Pending = false;   // failed read — end any processing state
+                return;
+            }
 
             BitmapImage? crop = outcome.CropPng is { Length: > 0 } png ? BitmapFromBytes(png) : null;
 
@@ -106,8 +147,10 @@ public partial class GearLoadoutView : UserControl
             {
                 if (crop is not null) _crops[item.Slot] = crop;
                 row.Item = item;
-                SlotSheet.SelectedItem = row;   // drives ShowItem via SelectionChanged
-                SlotSheet.ScrollIntoView(row);
+                // The row is usually ALREADY selected (capture-start selected it to show "processing"),
+                // so SelectionChanged won't fire — refresh the detail panel explicitly.
+                if (ReferenceEquals(SlotSheet.SelectedItem, row)) ShowItem(item, crop ?? _crops.GetValueOrDefault(item.Slot));
+                else { SlotSheet.SelectedItem = row; SlotSheet.ScrollIntoView(row); }
             }
             else
             {

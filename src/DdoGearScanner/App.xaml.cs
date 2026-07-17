@@ -88,6 +88,37 @@ public partial class App : Application
         main.Gear.DetectionToggleRequested += () => pipeline.ToggleSession();
         main.Gear.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
 
+        // Instant capture highlight at DETECTION time (gold); the outcome below re-colors it when the
+        // read (OCR or the slower LLM) completes.
+        pipeline.RegionDetected += (x, y, w, h) => overlay.ShowRegionHighlight(x, y, w, h, success: true);
+
+        // Gear-capture feedback on the game overlay: calibrated slot markers while a session is on
+        // (drag the inventory until they line up), or an explicit "not located" hint — a moved
+        // inventory / different UI scale must fail VISIBLY, not silently skip every capture.
+        pipeline.SlotOverlayChanged += state => overlay.Dispatcher.BeginInvoke(() =>
+        {
+            if (!state.SessionActive || !settings.ShowSlotMarkers || !state.Calibrated) { overlay.HideSlotMarkers(); return; }
+            if (state.AnchorKnown) overlay.ShowSlotMarkers(state.Points, state.Radius);
+            else overlay.ShowSlotHint(
+                $"Gear capture: inventory paper-doll NOT located — captures are being skipped. Open your inventory. " +
+                $"(best match {state.BestScore:P0}; if it stays low with the inventory open, this character's UI scale " +
+                $"differs from calibration — recalibrate slots)");
+        });
+        settings.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(AppSettings.ShowSlotMarkers)) pipeline.RefreshSlotOverlay(); };
+
+        // Debug crop dumps: remove the old inconsistently-named folders once, and wipe a feature's dump
+        // folder the moment its checkbox is unchecked (so turning it off actually reclaims the disk).
+        DebugPaths.RemoveLegacyFolders();
+        Vision.VisionDebug.RunDir = DebugPaths.Run;
+        void SyncVisionDebug() => Vision.VisionDebug.DumpRunRegions = settings.DebugMode && settings.DebugDumpRunRegions;
+        SyncVisionDebug();
+        settings.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(AppSettings.DebugMode) or nameof(AppSettings.DebugDumpRunRegions)) SyncVisionDebug();
+            if (e.PropertyName == nameof(AppSettings.DebugDumpGearCrops) && !settings.DebugDumpGearCrops) DebugPaths.ClearGear();
+            if (e.PropertyName == nameof(AppSettings.DebugDumpRunRegions) && !settings.DebugDumpRunRegions) DebugPaths.ClearRun();
+        };
+
         // Spatial debug (region borders) lives on the game overlay and reacts to settings on its own.
         // DATA debug (live chat OCR) lives in a separate movable Debug Diagnostics window, opened/closed
         // to follow the data-debug toggles so the game view stays uncluttered.
@@ -134,6 +165,7 @@ public partial class App : Application
             main.Gear.SetStatusText("Using the built-in 2560×1440 slot calibration. If slots don't detect, recalibrate via ☰ Menu → Calibrate Slots.");
 
         // Route pipeline results to the gear page + overlay (marshaled to UI thread inside the handlers).
+        pipeline.CaptureStarted += (slot, png) => main.Gear.OnCaptureStarted(slot, png);
         pipeline.Completed += outcome =>
         {
             main.Gear.OnCaptureCompleted(outcome);

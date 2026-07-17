@@ -35,6 +35,7 @@ public sealed class TooltipChangeDetector
     private readonly int _minW, _minH, _maxW, _maxH;
 
     private OpenCvMat? _baseline;              // scaled gray, no-tooltip reference
+    private OpenCvMat? _prevSmall;             // previous frame (scaled gray) — for the static-pixels check
     private int _stable;
     private Rect _candidate;
     private bool _hasCaptured;
@@ -59,6 +60,7 @@ public sealed class TooltipChangeDetector
     public void Reset()
     {
         _baseline?.Dispose(); _baseline = null;
+        _prevSmall?.Dispose(); _prevSmall = null;
         _stable = 0; _candidate = default;
         _hasCaptured = false; _capturedCursor = default;
         _havePrevCursor = false; _prevCursor = default;
@@ -74,6 +76,11 @@ public sealed class TooltipChangeDetector
             frameBgrOrBgra.Channels() == 4 ? ColorConversionCodes.BGRA2GRAY : ColorConversionCodes.BGR2GRAY);
         using OpenCvMat small = new();
         Cv2.Resize(gray, small, new Size((int)(gray.Width * Scale), (int)(gray.Height * Scale)));
+
+        // Keep last frame for the static-pixels check; this frame becomes "previous" for the next call.
+        OpenCvMat? prevSmall = _prevSmall;
+        _prevSmall = small.Clone();
+        using OpenCvMat? prevOwned = prevSmall;
 
         if (_baseline is null || _baseline.Size() != small.Size())
         {
@@ -147,6 +154,33 @@ public sealed class TooltipChangeDetector
             return null;
         }
         _noBlobFrames = 0;
+
+        // STATIC-PIXELS check: a real tooltip is pixel-identical frame-to-frame (static UI); animated
+        // scenery (water, waterfalls) churns constantly yet keeps a ~steady changed AREA, which fooled
+        // the area-delta settle below and got docks captured as "tooltips". If the candidate's pixels
+        // moved since the previous frame, it is not a tooltip — never settle on it.
+        if (prevSmall is not null && prevSmall.Size() == small.Size())
+        {
+            Rect rs = new Rect((int)(r.X * Scale), (int)(r.Y * Scale),
+                Math.Max(1, (int)(r.Width * Scale)), Math.Max(1, (int)(r.Height * Scale)))
+                & new Rect(0, 0, small.Width, small.Height);
+            if (rs.Width > 2 && rs.Height > 2)
+            {
+                using OpenCvMat cur = new(small, rs);
+                using OpenCvMat prev = new(prevSmall, rs);
+                using OpenCvMat interDiff = new();
+                Cv2.Absdiff(cur, prev, interDiff);
+                using OpenCvMat interMask = new();
+                Cv2.Threshold(interDiff, interMask, DiffThreshold, 255, ThresholdTypes.Binary);
+                double animFrac = Cv2.CountNonZero(interMask) / (double)(rs.Width * rs.Height);
+                if (animFrac > 0.02)
+                {
+                    _stable = 0;
+                    LastChangeInfo = $"animated({animFrac:P0}) {r.Width}x{r.Height}";
+                    return null;
+                }
+            }
+        }
 
         _candidate = r;
         // Only count it as "settled" once the tooltip has stopped changing (finished drawing in).

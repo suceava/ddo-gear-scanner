@@ -22,8 +22,8 @@ public readonly record struct RegionRatios(double X0, double Y0, double X1, doub
 /// a few ticks, ends the run. The reward-panel region gives name+difficulty+XP at completion. All fields
 /// are best-effort and user-editable, so OCR misses cost an edit, not a lost run.
 ///
-/// TUNING: with DebugDumpCrops on (default), each ~5s this writes the two region crops + OCR'd text to
-/// %APPDATA%\DdoGearScanner\run-debug\ and logs every tracker read — that's how the regions get dialed in.
+/// TUNING: with Debug Mode + "Dump region crops" on, each ~5s this writes the two region crops + OCR'd text to
+/// %APPDATA%\DdoGearScanner\debug\run\ and logs every tracker read — that's how the regions get dialed in.
 /// </summary>
 public sealed class RunTrackerPipeline
 {
@@ -364,7 +364,7 @@ public sealed class RunTrackerPipeline
         bool readAvatar = !runActive && (++_avatarTick % 3 == 0);
         bool debugChat = ChatDebug is not null && AppSettings.Instance.DebugMode && AppSettings.Instance.DebugShowChatText;
         bool readChat = runActive || debugChat;   // also read for the debug chat view while idle
-        bool dump = AppSettings.Instance.DebugDumpCrops && now - _lastDumpTick >= DumpIntervalMs;
+        bool dump = AppSettings.Instance.DebugMode && AppSettings.Instance.DebugDumpRunRegions && now - _lastDumpTick >= DumpIntervalMs;
         if (dump) _lastDumpTick = now;
 
         OpenCvMat trackerCrop, compCrop, chatCrop, avatarCrop;
@@ -453,21 +453,12 @@ public sealed class RunTrackerPipeline
     {
         try
         {
-            string dir = Path.Combine(AppSettings.AppDataDir, "run-debug");
+            string dir = DebugPaths.Run;
             Directory.CreateDirectory(dir);
             if (!trackerCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "tracker.png"), trackerCrop);
             if (!compCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "completion.png"), compCrop);
             if (!chatCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "chat.png"), chatCrop);
             if (!avatarCrop.Empty()) Cv2.ImWrite(Path.Combine(dir, "character.png"), avatarCrop);
-            // Corpus mode: keep a timestamped copy of each tracker crop (labelled with what Windows OCR
-            // read) so we accumulate real in-dungeon ornate-title samples to bake OCR engines off against.
-            if (AppSettings.Instance.DebugSaveTrackerCrops && !trackerCrop.Empty())
-            {
-                string corpus = Path.Combine(dir, "tracker-corpus");
-                Directory.CreateDirectory(corpus);
-                string safe = new string((questName ?? "none").Where(char.IsLetterOrDigit).ToArray());
-                Cv2.ImWrite(Path.Combine(corpus, $"{DateTime.Now:HHmmss}_{safe}.png"), trackerCrop);
-            }
             Log($"dump: tracker=\"{questName ?? "(none)"}\" completion=<<{compRaw.Replace("\n", " | ")}>> chat=<<{chatRaw.Replace("\n", " | ")}>> char=<<{avatarRaw.Replace("\n", " | ")}>>");
         }
         catch (Exception ex) { Log($"dump error {ex.GetType().Name}: {ex.Message}"); }

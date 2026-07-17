@@ -22,17 +22,34 @@ public sealed class SlotRow : INotifyPropertyChanged
         set
         {
             _item = value;
-            foreach (string p in new[] { nameof(Item), nameof(HasItem), nameof(Name), nameof(Sub), nameof(Badge) })
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
+            _pending = false;   // a landed read (success or not) ends the "processing" state
+            Raise();
         }
+    }
+
+    // True from the moment a tooltip is CAPTURED until its (possibly slow, LLM) read lands — the row
+    // shows the shot was taken and is being processed, so the read latency doesn't feel like a miss.
+    private bool _pending;
+    public bool Pending
+    {
+        get => _pending;
+        set { _pending = value; Raise(); }
+    }
+
+    private void Raise()
+    {
+        foreach (string p in new[] { nameof(Item), nameof(HasItem), nameof(Name), nameof(Sub), nameof(Badge), nameof(Pending) })
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
     }
 
     public bool HasItem => _item is not null;
 
-    public string Name => _item is null ? "— empty —"
+    public string Name => _pending ? "⏳ Processing…"
+        : _item is null ? "— empty —"
         : (!string.IsNullOrWhiteSpace(_item.Name) ? _item.Name : "(unnamed)");
 
-    public string Sub => _item is null ? ""
+    public string Sub => _pending ? "captured — reading tooltip"
+        : _item is null ? ""
         : $"ML {_item.MinimumLevel?.ToString() ?? "?"}  ·  {_item.Mods.Count} mods"
           + (_item.SetBonuses.Count > 0 ? "  ·  set" : "");
 

@@ -29,6 +29,22 @@
                        StrokeThickness="3"
                        RadiusX="4" RadiusY="4" />
         </Canvas>
+        <!-- Gear capture feedback: shown while a session is on but the inventory paper-doll can't be
+             located — the silent-failure case (moved window / different UI scale) made visible. -->
+        <Border x:Name="SlotHintBorder"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,84,0,0"
+                MaxWidth="760"
+                Background="#E01A1010"
+                BorderBrush="#FFE05C5C"
+                BorderThickness="2"
+                CornerRadius="6"
+                Padding="18,10"
+                Visibility="Collapsed">
+            <TextBlock x:Name="SlotHintText" FontFamily="Segoe UI" FontSize="15" TextWrapping="Wrap"
+                       Foreground="White" Text="" />
+        </Border>
         <Border x:Name="ToastBorder"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"

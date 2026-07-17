@@ -179,21 +179,30 @@ public sealed class EntryPopupReader
         return (selected, sb.ToString().Trim() + $" lblY={labelTop}");
     }
 
-    // Diagnostic: dump the region crop + its OCR so mis-reads (e.g. the level) are visible.
+    // Diagnostic: dump the region crop + its OCR so mis-reads (e.g. the level) are visible. Gated + pathed
+    // by the app via VisionDebug (the Vision layer can't see AppSettings), so it obeys the run-region
+    // dump checkbox and writes to the same debug\run folder as the rest.
     private static void DebugDump(OpenCvMat region, string ocrText)
     {
+        if (!VisionDebug.DumpRunRegions || VisionDebug.RunDir.Length == 0) return;
         try
         {
-            string dir = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DdoGearScanner", "run-debug");
-            System.IO.Directory.CreateDirectory(dir);
-            Cv2.ImWrite(System.IO.Path.Combine(dir, "popup.png"), region);
+            System.IO.Directory.CreateDirectory(VisionDebug.RunDir);
+            Cv2.ImWrite(System.IO.Path.Combine(VisionDebug.RunDir, "popup.png"), region);
             string log = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ddo-gear-scanner.log");
             System.IO.File.AppendAllText(log,
                 $"{DateTime.Now:HH:mm:ss.fff} [popup] ocr: {ocrText.Replace("\n", " | ")}{Environment.NewLine}");
         }
         catch { }
     }
+}
+
+/// <summary>App-set debug switches for the Vision layer, which can't reference the app's AppSettings.
+/// The app keeps these in sync with Debug Mode + the run-region dump checkbox.</summary>
+public static class VisionDebug
+{
+    public static volatile bool DumpRunRegions;
+    public static string RunDir = string.Empty;
 }
 
 /// <summary>

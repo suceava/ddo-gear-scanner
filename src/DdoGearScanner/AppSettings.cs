@@ -43,9 +43,14 @@ public sealed class AppSettings : INotifyPropertyChanged
     private uint _hotkeyVk = 0x2D; // VK_INSERT
     public uint HotkeyVk { get => _hotkeyVk; set => Set(ref _hotkeyVk, value); }
 
-    // Dump each detected tooltip crop to %APPDATA%\DdoGearScanner\debug-crops for tuning.
-    private bool _debugDumpCrops = true;
-    public bool DebugDumpCrops { get => _debugDumpCrops; set => Set(ref _debugDumpCrops, value); }
+    // Per-feature disk dumps for tuning, each OFF by default and gated under DebugMode (dev
+    // instrumentation). Gear → debug\gear\ (grows unbounded — one file per capture); Run → debug\run\
+    // (4 fixed files, overwritten each dump). Kept SEPARATE so neither feature's toggle touches the other.
+    private bool _debugDumpGearCrops;
+    public bool DebugDumpGearCrops { get => _debugDumpGearCrops; set => Set(ref _debugDumpGearCrops, value); }
+
+    private bool _debugDumpRunRegions;
+    public bool DebugDumpRunRegions { get => _debugDumpRunRegions; set => Set(ref _debugDumpRunRegions, value); }
 
     // Main window bounds (NaN width/height => use the XAML default on first run).
     private double _windowLeft = 80;
@@ -66,6 +71,12 @@ public sealed class AppSettings : INotifyPropertyChanged
     // Run tracker: automatically open the quest's DDO wiki page in the browser when a run starts. Off by default.
     private bool _autoOpenWiki;
     public bool AutoOpenWiki { get => _autoOpenWiki; set => Set(ref _autoOpenWiki, value); }
+
+    // Gear capture: draw the calibrated slot markers on the game while a detection session is active,
+    // and an explicit "inventory not located" hint when the paper-doll can't be found — so a moved
+    // inventory window / different UI scale fails VISIBLY instead of silently skipping every capture.
+    private bool _showSlotMarkers = true;
+    public bool ShowSlotMarkers { get => _showSlotMarkers; set => Set(ref _showSlotMarkers, value); }
 
     // ---- AI reading (OpenRouter) — USER settings, app-wide. When enabled, EVENT reads (gear tooltip
     // captures, the quest-entry popup, the character avatar) go through an LLM vision model and override
@@ -121,11 +132,6 @@ public sealed class AppSettings : INotifyPropertyChanged
     // Show a live panel of the OCR'd chat text (with newly-detected lines highlighted).
     private bool _debugShowChatText;
     public bool DebugShowChatText { get => _debugShowChatText; set => Set(ref _debugShowChatText, value); }
-
-    // Debug: save a timestamped copy of the quest-tracker crop each dump, building a corpus of real
-    // in-dungeon ornate-title samples for OCR tuning (e.g. the future LLM reader). Off by default.
-    private bool _debugSaveTrackerCrops;
-    public bool DebugSaveTrackerCrops { get => _debugSaveTrackerCrops; set => Set(ref _debugSaveTrackerCrops, value); }
 
     // Debug Diagnostics window bounds (NaN => center on first open).
     private double _debugLeft = double.NaN;
@@ -191,7 +197,8 @@ public sealed class AppSettings : INotifyPropertyChanged
                 {
                     s.HotkeyModifiers = loaded.HotkeyModifiers;
                     s.HotkeyVk = loaded.HotkeyVk;
-                    s.DebugDumpCrops = loaded.DebugDumpCrops;
+                    s.DebugDumpGearCrops = loaded.DebugDumpGearCrops;
+                    s.DebugDumpRunRegions = loaded.DebugDumpRunRegions;
                     s.WindowLeft = loaded.WindowLeft;
                     s.WindowTop = loaded.WindowTop;
                     s.WindowWidth = loaded.WindowWidth;
@@ -199,6 +206,7 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.WindowMaximized = loaded.WindowMaximized;
                     s.ActivePage = loaded.ActivePage ?? "Home";
                     s.AutoOpenWiki = loaded.AutoOpenWiki;
+                    s.ShowSlotMarkers = loaded.ShowSlotMarkers;
                     s.LlmEnabled = loaded.LlmEnabled;
                     s.OpenRouterApiKey = loaded.OpenRouterApiKey ?? string.Empty;
                     s.OpenRouterModel = string.IsNullOrWhiteSpace(loaded.OpenRouterModel) ? s.OpenRouterModel : loaded.OpenRouterModel;
@@ -216,7 +224,6 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.DebugMode = loaded.DebugMode;
                     s.RunDebugOverlay = loaded.RunDebugOverlay;
                     s.DebugShowChatText = loaded.DebugShowChatText;
-                    s.DebugSaveTrackerCrops = loaded.DebugSaveTrackerCrops;
                     s.DebugLeft = loaded.DebugLeft;
                     s.DebugTop = loaded.DebugTop;
                     s.DebugWidth = loaded.DebugWidth;

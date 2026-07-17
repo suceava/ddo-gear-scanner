@@ -31,7 +31,7 @@ public partial class OverlayWindow : Window
         InitializeComponent();
         _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.8) };
         _toastTimer.Tick += (_, _) => { _toastTimer.Stop(); ToastBorder.Visibility = Visibility.Collapsed; };
-        _highlightTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4.0) };
+        _highlightTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.0) };
         _highlightTimer.Tick += (_, _) => { _highlightTimer.Stop(); RegionHighlight.Visibility = Visibility.Collapsed; };
     }
 
@@ -116,6 +116,84 @@ public partial class OverlayWindow : Window
             _highlightTimer.Stop();
             _highlightTimer.Start();
         });
+    }
+
+    // ---- gear-capture slot markers (feedback that calibration and reality line up) ----
+
+    private readonly List<UIElement> _slotShapes = new();
+    private System.Windows.Threading.DispatcherTimer? _slotFadeTimer;
+    private static readonly Brush SlotStroke = new SolidColorBrush(Color.FromArgb(0xE6, 0xE6, 0xC6, 0x6A));
+    private static readonly Brush SlotFill = new SolidColorBrush(Color.FromArgb(0x28, 0xE6, 0xC6, 0x6A));
+
+    /// <summary>Draw a circle (+ tiny label) at every calibrated slot point — the user can SEE where
+    /// the app expects the inventory slots and drag the window until they line up. Points are frame
+    /// (physical) pixels; <paramref name="radius"/> is the slot hover tolerance. Markers FADE after a
+    /// few seconds (they'd otherwise obscure the very tooltips being captured) and re-appear whenever
+    /// this is called again — i.e. at session start and every time the inventory window moves.</summary>
+    public void ShowSlotMarkers(IReadOnlyList<(string Label, int X, int Y)> points, int radius)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            ClearSlotShapes();
+            SlotHintBorder.Visibility = Visibility.Collapsed;
+            if (_slotFadeTimer is null)
+            {
+                _slotFadeTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+                _slotFadeTimer.Tick += (_, _) => { _slotFadeTimer.Stop(); ClearSlotShapes(); };
+            }
+            _slotFadeTimer.Stop();
+            _slotFadeTimer.Start();
+            DpiScale dpi = VisualTreeHelper.GetDpi(this);
+            foreach ((string label, int x, int y) in points)
+            {
+                double d = radius * 2 / dpi.DpiScaleX;
+                var circle = new System.Windows.Shapes.Ellipse
+                {
+                    Width = d, Height = d, Stroke = SlotStroke, StrokeThickness = 2, Fill = SlotFill,
+                };
+                Canvas.SetLeft(circle, x / dpi.DpiScaleX - d / 2);
+                Canvas.SetTop(circle, y / dpi.DpiScaleY - d / 2);
+                HighlightCanvas.Children.Add(circle);
+                _slotShapes.Add(circle);
+
+                var text = new TextBlock
+                {
+                    Text = label, FontFamily = new FontFamily("Segoe UI"), FontSize = 10,
+                    FontWeight = FontWeights.SemiBold, Foreground = SlotStroke,
+                };
+                Canvas.SetLeft(text, x / dpi.DpiScaleX - d / 2);
+                Canvas.SetTop(text, y / dpi.DpiScaleY + d / 2 + 1);
+                HighlightCanvas.Children.Add(text);
+                _slotShapes.Add(text);
+            }
+        });
+    }
+
+    /// <summary>Show the "capture is on but the inventory isn't located" message — the previously
+    /// SILENT failure (moved inventory / per-character UI scale) made visible on the game.</summary>
+    public void ShowSlotHint(string text)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            ClearSlotShapes();
+            SlotHintText.Text = text;
+            SlotHintBorder.Visibility = Visibility.Visible;
+        });
+    }
+
+    public void HideSlotMarkers()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            ClearSlotShapes();
+            SlotHintBorder.Visibility = Visibility.Collapsed;
+        });
+    }
+
+    private void ClearSlotShapes()
+    {
+        foreach (UIElement s in _slotShapes) HighlightCanvas.Children.Remove(s);
+        _slotShapes.Clear();
     }
 
     /// <summary>Show a toast. When <paramref name="sticky"/>, it stays up until the next toast
