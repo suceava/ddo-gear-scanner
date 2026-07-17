@@ -508,11 +508,12 @@ public sealed class RunTrackerPipeline
                     entry = entry with { Difficulty = prev.Difficulty };
                 if (!string.Equals(entry.Difficulty, _pendingEntry?.Difficulty, StringComparison.Ordinal))
                     Log($"difficulty: {entry.Difficulty ?? "?"}");
-                // An LLM answer for THIS popup owns the static facts (name/level/duration) — a fresh local
-                // read must not clobber them. Difficulty stays LIVE-local (the user can re-click after the
-                // LLM snapshot); the LLM's difficulty only backs up a local miss.
+                // An LLM answer for THIS popup owns only the truly STATIC facts: name + duration. Level AND
+                // difficulty stay LIVE-local — both change as the user re-picks difficulty (DDO bumps the
+                // shown Level for Hard/Elite/Reaper), so the LLM's one-shot snapshot must NOT freeze them;
+                // it only BACKS UP a local miss (null).
                 if (_llmEntryValue is { } ai && Key(entry.Name) == _llmEntryKey)
-                    entry = new QuestEntry(ai.Name, ai.QuestLevel ?? entry.QuestLevel, entry.Difficulty ?? ai.Difficulty, ai.Duration ?? entry.Duration);
+                    entry = new QuestEntry(ai.Name, entry.QuestLevel ?? ai.QuestLevel, entry.Difficulty ?? ai.Difficulty, ai.Duration ?? entry.Duration);
                 _pendingEntry = entry;
                 _pendingEntryTick = nowTick;
                 _armedArea = Key(name);   // the area you're standing in while choosing (the "outside")
@@ -746,9 +747,11 @@ public sealed class RunTrackerPipeline
             Log($"llm-entry: \"{ai.Name}\" L{ai.QuestLevel?.ToString() ?? "?"} diff={ai.Difficulty ?? "?"} dur={ai.Duration ?? "?"}");
 
             // The popup may still be pending, or its run may already be live — correct whichever matches.
+            // Name + duration come from the LLM; level + difficulty stay LOCAL (they track the difficulty
+            // the user is on / entered at) — the LLM only fills a local miss, never overrides a live value.
             if (_pendingEntry is { } pe && Key(pe.Name) == forKey)
             {
-                _pendingEntry = new QuestEntry(ai.Name, ai.QuestLevel ?? pe.QuestLevel, pe.Difficulty ?? ai.Difficulty, ai.Duration ?? pe.Duration);
+                _pendingEntry = new QuestEntry(ai.Name, pe.QuestLevel ?? ai.QuestLevel, pe.Difficulty ?? ai.Difficulty, ai.Duration ?? pe.Duration);
                 updatedPending = _pendingEntry;
                 _shownEntryName = null;   // force the READY card to re-render with corrected fields
             }
@@ -757,7 +760,7 @@ public sealed class RunTrackerPipeline
                 _current = cur with
                 {
                     DungeonName = ai.Name,
-                    QuestLevel = ai.QuestLevel ?? cur.QuestLevel,
+                    QuestLevel = cur.QuestLevel ?? ai.QuestLevel,
                     Difficulty = cur.Difficulty ?? ai.Difficulty,
                     QuestDuration = ai.Duration ?? cur.QuestDuration,
                 };
