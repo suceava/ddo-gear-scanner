@@ -17,10 +17,29 @@ public sealed class AppSettings : INotifyPropertyChanged
     public const uint ModControl = 0x0002;
     public const uint ModShift = 0x0004;
 
-    private static readonly string Dir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "DdoGearScanner");
+    private static readonly string Dir = ResolveDataDir();
     private static readonly string SettingsPath = Path.Combine(Dir, "settings.json");
+
+    // Data folder = %APPDATA%\DdoCompanion\ (matches the product/exe name). One-time migration: the app
+    // used to store under %APPDATA%\DdoGearScanner\, so if the new folder doesn't exist yet but the old
+    // one does, RENAME it over — carrying existing scans / loadouts / runs / settings with zero loss. On
+    // any failure we fall back to the legacy folder so data is never stranded.
+    private static string ResolveDataDir()
+    {
+        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string dir = Path.Combine(appData, "DdoCompanion");
+        string legacy = Path.Combine(appData, "DdoGearScanner");
+        try
+        {
+            if (Directory.Exists(dir)) return dir;                 // already migrated (or fresh new-name install)
+            if (Directory.Exists(legacy)) Directory.Move(legacy, dir);
+            return dir;
+        }
+        catch
+        {
+            return Directory.Exists(legacy) ? legacy : dir;        // move failed → keep using existing data
+        }
+    }
 
     // AllowNamedFloatingPointLiterals so the NaN "unset" sentinels for window bounds serialize as
     // "NaN" instead of throwing (which silently broke ALL settings persistence).

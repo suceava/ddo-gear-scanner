@@ -78,9 +78,10 @@ coordinates line up. Falls back to line-by-line parse when no bullets are found.
 
 ## App shell — "DDO Companion" (single window, nav rail, pages)
 
-The product is now **DDO Companion** — the output exe is **`DdoCompanion.exe`** (`AssemblyName`), but the
-**namespace, solution/repo, and `%APPDATA%\DdoGearScanner\` data folder deliberately stay `DdoGearScanner`**
-(repo identity + existing user-data path — do not change). `ShellWindow` is the main window: a header (product mark + a global ☰ menu with Debug
+The product is now **DDO Companion** — the output exe is **`DdoCompanion.exe`** (`AssemblyName`) and the
+data folder is **`%APPDATA%\DdoCompanion\`** (`AppSettings.ResolveDataDir` auto-migrates the old
+`DdoGearScanner\` folder over on first launch — one-time `Directory.Move`, no data loss). The **namespace
+and solution/repo name deliberately stay `DdoGearScanner`** (repo identity — do not change). `ShellWindow` is the main window: a header (product mark + a global ☰ menu with Debug
 Settings) + a left **nav rail** (Home · Gear Loadout · Run Tracker) swapping a `ContentControl`. The two
 features are **UserControl pages**: `GearLoadoutView` (the old loadout sheet + character selector + gear
 menu, extracted from the deleted `CaptureListWindow`) and `RunTrackerView` (extracted from the deleted
