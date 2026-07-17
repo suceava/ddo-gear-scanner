@@ -36,7 +36,7 @@ and OCR infrastructure are reused from it.
 ## Steps
 
 1. Launch DDO in windowed / borderless windowed mode and **open your inventory** (paper-doll visible).
-2. Run `DdoGearScanner.exe`.
+2. Run `DdoCompanion.exe`.
 3. **Calibrate once:** with the inventory open and no tooltip showing, click **Calibrate slots** and
    follow the on-screen prompts — hover the center of each slot it names and press the hotkey. (Saved;
    only redo if you change resolution / UI scale.)
@@ -89,5 +89,5 @@ dotnet test
 powershell -ExecutionPolicy Bypass -File .\publish.ps1
 ```
 
-Produces `dist\DdoGearScanner.exe` (self-contained single file; bundled .NET runtime + OpenCV
+Produces `dist\DdoCompanion.exe` (self-contained single file; bundled .NET runtime + OpenCV
 natives). Copy it anywhere on a Windows machine — no .NET install required.

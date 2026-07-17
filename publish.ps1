@@ -7,11 +7,11 @@
 #   .\publish.ps1 -Release v1.0.0 -Notes "..."   — release with custom notes (else auto-generated)
 #
 # Output:
-#   .\dist\DdoGearScanner.exe   (self-contained: bundled .NET runtime + OpenCV natives; the item
+#   .\dist\DdoCompanion.exe   (self-contained: bundled .NET runtime + OpenCV natives; the item
 #                                catalog / bonus types / ragdoll template / default slotmap are all
 #                                embedded, so nothing ships alongside it)
 #
-# Distributable: copy dist\DdoGearScanner.exe to any Windows 10/11 x64 machine. No .NET install
+# Distributable: copy dist\DdoCompanion.exe to any Windows 10/11 x64 machine. No .NET install
 # required. DDO must run in windowed / borderless windowed mode for capture to work. Runs asInvoker
 # (no admin). -Release uploads via the gh CLI (https://cli.github.com).
 
@@ -30,7 +30,7 @@ $publishDir = Join-Path $root 'src\DdoGearScanner\bin\Release\net8.0-windows10.0
 $distDir = Join-Path $root 'dist'
 
 # Stop any running instance so the build can overwrite the exe.
-Get-Process DdoGearScanner -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process DdoCompanion -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 1
 
 if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
@@ -50,15 +50,15 @@ dotnet publish $proj `
 if ($LASTEXITCODE -ne 0) { throw "Publish failed" }
 
 New-Item -ItemType Directory -Path $distDir | Out-Null
-Copy-Item (Join-Path $publishDir 'DdoGearScanner.exe') $distDir
+Copy-Item (Join-Path $publishDir 'DdoCompanion.exe') $distDir
 
-$exe = Join-Path $distDir 'DdoGearScanner.exe'
+$exe = Join-Path $distDir 'DdoCompanion.exe'
 $size = (Get-Item $exe).Length / 1MB
 Write-Output ""
 Write-Output ("Built: {0} ({1:N0} MB)" -f $exe, $size)
 
 if ($Zip) {
-    $zipPath = Join-Path $distDir 'DdoGearScanner-windows.zip'
+    $zipPath = Join-Path $distDir 'DdoCompanion-windows.zip'
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
     Compress-Archive -Path $exe -DestinationPath $zipPath -CompressionLevel Optimal
     $zipSize = (Get-Item $zipPath).Length / 1MB

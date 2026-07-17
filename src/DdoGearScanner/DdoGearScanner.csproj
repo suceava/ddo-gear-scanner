@@ -7,8 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <RootNamespace>DdoGearScanner</RootNamespace>
-    <AssemblyName>DdoGearScanner</AssemblyName>
-    <!-- User-visible product name. Assembly/namespace stay DdoGearScanner (repo + %APPDATA% path). -->
+    <!-- Output exe = DdoCompanion.exe (the product name). Namespace + %APPDATA%\DdoGearScanner\ folder
+         deliberately stay DdoGearScanner (repo identity + existing user-data path — do NOT change). -->
+    <AssemblyName>DdoCompanion</AssemblyName>
     <Product>DDO Companion</Product>
     <AssemblyTitle>DDO Companion</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
