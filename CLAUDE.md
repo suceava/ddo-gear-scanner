@@ -81,8 +81,11 @@ coordinates line up. Falls back to line-by-line parse when no bullets are found.
 The product is now **DDO Companion** — the output exe is **`DdoCompanion.exe`** (`AssemblyName`) and the
 data folder is **`%APPDATA%\DdoCompanion\`** (`AppSettings.ResolveDataDir` auto-migrates the old
 `DdoGearScanner\` folder over on first launch — one-time `Directory.Move`, no data loss). The **namespace
-and solution/repo name deliberately stay `DdoGearScanner`** (repo identity — do not change). `ShellWindow` is the main window: a header (product mark + a global ☰ menu with Debug
-Settings) + a left **nav rail** (Home · Gear Loadout · Run Tracker) swapping a `ContentControl`. The two
+and solution/repo name deliberately stay `DdoGearScanner`** (repo identity — do not change). `ShellWindow` is the main window: a header (product mark + a **detected-character chip** + a global ☰ menu
+with Settings/Debug) + a left **nav rail** (Home · Gear Loadout · Run Tracker) swapping a `ContentControl`.
+The header chip DISPLAYS the run-tracker's detected character (name+level, polled ~1s) — green dot = matches
+a saved profile, amber + "＋ Add" = new (one click creates + activates it). It's display-only: detection
+never switches the Gear-active character (the Gear dropdown stays the manual selector). The two
 features are **UserControl pages**: `GearLoadoutView` (the old loadout sheet + character selector + gear
 menu, extracted from the deleted `CaptureListWindow`) and `RunTrackerView` (extracted from the deleted
 `RunTrackerWindow`). `HomeView` is a landing page. The active page is remembered (`AppSettings.ActivePage`).

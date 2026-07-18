@@ -35,6 +35,34 @@
             </Style.Triggers>
         </Style>
 
+        <!-- Row edit: hover-reveal pencil that opens the full run editor (incl. character level). -->
+        <Style x:Key="RowEditButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Visibility" Value="Hidden" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="ToolTip" Value="Edit this run" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Padding="6,2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource GoldBright}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Row delete: a borderless glyph that only appears when you hover the row. -->
         <Style x:Key="RowDeleteButton" TargetType="Button">
             <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
@@ -179,6 +207,13 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="" Width="34">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource RowEditButton}" Content="✎" Click="RowEdit_Click" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

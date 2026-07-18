@@ -53,6 +53,26 @@
                     </Border>
                 </Popup>
 
+                <!-- Detected-character chip (right, before the menu). DISPLAY only — shows who the game
+                     detects you're playing; never changes the Gear-active character. Amber dot + Add when
+                     the detected character has no saved profile yet. -->
+                <Border x:Name="CharChip" DockPanel.Dock="Right" Margin="0,0,12,0" VerticalAlignment="Center"
+                        Background="{StaticResource BgInput}" CornerRadius="11" Padding="10,4">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <StackPanel x:Name="CharInfo" Orientation="Horizontal" Background="Transparent" Cursor="Hand"
+                                    MouseLeftButtonUp="CharChip_Click" ToolTip="Detected character — click to manage on the Gear page">
+                            <Ellipse x:Name="CharDot" Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center"
+                                     Fill="{StaticResource TextMuted}" />
+                            <TextBlock x:Name="CharName" Text="No character detected" Foreground="{StaticResource Parchment}"
+                                       FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock x:Name="CharLevel" Text="" Foreground="{StaticResource TextMuted}" FontSize="12"
+                                       Margin="6,0,0,0" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button x:Name="CharAddButton" Content="＋ Add" Margin="9,0,0,0" Padding="7,1" FontSize="11"
+                                Visibility="Collapsed" Click="CharAdd_Click" ToolTip="Add this detected character as a saved profile" />
+                    </StackPanel>
+                </Border>
+
                 <!-- Product mark (left) -->
                 <TextBlock Text="DDO Companion" FontSize="18" Style="{StaticResource Title}" VerticalAlignment="Center" />
             </DockPanel>

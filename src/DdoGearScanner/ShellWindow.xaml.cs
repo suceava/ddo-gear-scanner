@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using DdoGearScanner.Model;
 
 namespace DdoGearScanner;
@@ -15,7 +16,12 @@ namespace DdoGearScanner;
 public partial class ShellWindow : Window
 {
     private readonly CharacterStore _charStore;
+    private readonly RunTrackerPipeline _runPipeline;
     private readonly AppSettings _settings;
+    private readonly DispatcherTimer _charChipTimer;
+    private (string Name, int? Level)? _pendingAdd;   // detected char with no profile, ready for the Add button
+    private static readonly Brush CharMatched = Frozen(0x8F, 0xCF, 0x8A);   // green — detected name has a profile
+    private static readonly Brush CharUnknown = Frozen(0xE8, 0xB3, 0x4A);   // amber — detected, no profile yet
 
     /// <summary>The Gear Loadout page — exposed so <see cref="App"/> can route gear-pipeline events to it.</summary>
     public GearLoadoutView Gear { get; }
@@ -31,6 +37,7 @@ public partial class ShellWindow : Window
         InitializeComponent();
         WindowChrome.UseDarkTitleBar(this);
         _charStore = charStore;
+        _runPipeline = runPipeline;
         _settings = settings;
 
         WindowChrome.ApplyBounds(this, settings.WindowLeft, settings.WindowTop,
@@ -48,6 +55,84 @@ public partial class ShellWindow : Window
         _home.NavigateRun += ShowRun;
 
         RestoreActivePage();
+
+        // Header character chip: poll the pipeline's detected character (~1s; detection is infrequent) and
+        // reflect it. DISPLAY only — never changes the Gear-active character.
+        _charChipTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _charChipTimer.Tick += (_, _) => UpdateCharChip();
+        _charChipTimer.Start();
+        UpdateCharChip();
+    }
+
+    // ---- header character chip ----
+
+    private void UpdateCharChip()
+    {
+        (string? detName, int? detLevel) = _runPipeline.DetectedCharacter;
+        bool detected = !string.IsNullOrWhiteSpace(detName);
+
+        // Show the detected character when we have one; otherwise fall back to the active Gear character
+        // so the chip isn't empty.
+        string? name = detected ? detName : _charStore.Active?.Name;
+        int? level = detected ? detLevel : _charStore.Active?.Level;
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            CharName.Text = "No character detected";
+            CharLevel.Text = "";
+            CharDot.Fill = (Brush)FindResource("TextMuted");
+            CharAddButton.Visibility = Visibility.Collapsed;
+            _pendingAdd = null;
+            return;
+        }
+
+        CharName.Text = name!;
+        CharLevel.Text = level is int lv ? $"Lv {lv}" : "";
+
+        bool hasProfile = _charStore.Profiles.Any(p => NameEq(p.Name, name));
+        if (!detected)
+        {
+            CharDot.Fill = (Brush)FindResource("Gold");     // showing the active Gear char (fallback), neutral
+            CharAddButton.Visibility = Visibility.Collapsed;
+            _pendingAdd = null;
+        }
+        else if (hasProfile)
+        {
+            CharDot.Fill = CharMatched;                     // detected + saved
+            CharAddButton.Visibility = Visibility.Collapsed;
+            _pendingAdd = null;
+        }
+        else
+        {
+            CharDot.Fill = CharUnknown;                     // detected, no profile → offer Add
+            CharAddButton.Visibility = Visibility.Visible;
+            _pendingAdd = (name!, level);
+        }
+    }
+
+    private void CharChip_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => ShowGear();
+
+    private void CharAdd_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pendingAdd is not { } add) return;
+        Gear.AddDetectedCharacter(add.Name, add.Level);   // creates the profile + makes it active
+        ShowGear();                                        // land on Gear so they can set playstyle/classes
+        UpdateCharChip();
+    }
+
+    // Same-character test tolerant of case/punctuation/OCR spacing.
+    private static bool NameEq(string a, string? b)
+    {
+        static string N(string? s) => new string((s ?? "").Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        string na = N(a);
+        return na.Length > 0 && na == N(b);
+    }
+
+    private static Brush Frozen(byte r, byte g, byte b)
+    {
+        var br = new SolidColorBrush(Color.FromRgb(r, g, b));
+        br.Freeze();
+        return br;
     }
 
     private void RestoreActivePage()

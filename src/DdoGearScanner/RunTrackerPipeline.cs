@@ -106,6 +106,7 @@ public sealed class RunTrackerPipeline
     private int? _runXp;                // latest "receive N XP" seen in chat this run (XP is chat-only)
     private string? _detectedName;     // latest character name OCR'd from the avatar region
     private int? _detectedLevel;       // latest character level OCR'd from the avatar region
+    private string? _detectedLevelKey; // the character key _detectedLevel belongs to (for the ding-up guard)
     private int _pendingCount;         // consecutive "entered a non-hub area" ticks while armed by a popup
     private int _loadingTicks;         // consecutive blank-tracker ticks after the popup closed (loading in)
     private string? _lastFinalizedName;
@@ -492,7 +493,18 @@ public sealed class RunTrackerPipeline
                 // quote etc.) must not clobber it. A DIFFERENT character (new key) goes back to local.
                 if (!string.IsNullOrWhiteSpace(avatar.Name))
                     _detectedName = _llmCharNames.TryGetValue(Key(avatar.Name), out string? confirmed) ? confirmed : avatar.Name;
-                if (avatar.Level is not null) _detectedLevel = avatar.Level;
+                // Level: reject a read LOWER than the current one for the SAME character — the avatar OCR
+                // drops the leading digit sometimes (16 -> 6), which was flipping the level. Levels only go
+                // UP (a ding), so a lower read is a misread; a DIFFERENT character (new key) starts fresh.
+                if (avatar.Level is int al)
+                {
+                    string lk = Key(_detectedName ?? avatar.Name ?? string.Empty);
+                    if (!string.Equals(lk, _detectedLevelKey, StringComparison.Ordinal) || _detectedLevel is null || al >= _detectedLevel)
+                    {
+                        _detectedLevel = al;
+                        _detectedLevelKey = lk;
+                    }
+                }
             }
 
             // The adventure-entry popup (seen while still in town) names the quest cleanly — hold it until
@@ -799,7 +811,7 @@ public sealed class RunTrackerPipeline
                     _llmCharNames[Key(confirmed)] = confirmed;   // local may later read the TRUE spelling's key
                     _llmCharDone.Add(Key(confirmed));
                     _detectedName = confirmed;
-                    if (ai.Level is not null) _detectedLevel = ai.Level;
+                    if (ai.Level is not null) { _detectedLevel = ai.Level; _detectedLevelKey = Key(confirmed); }
                     Log($"llm-char: \"{confirmed}\" lvl={ai.Level?.ToString() ?? "?"}");
                     if (_current is { Completed: false, Edited: false } cur)
                     {

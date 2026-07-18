@@ -19,21 +19,23 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="14" />
-                <ColumnDefinition Width="110" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
                 <TextBlock Text="Difficulty" Foreground="{StaticResource TextMuted}" FontSize="12" />
-                <ComboBox x:Name="DifficultyBox" IsEditable="True" Margin="0,2,0,0">
-                    <ComboBoxItem>Casual</ComboBoxItem>
-                    <ComboBoxItem>Normal</ComboBoxItem>
-                    <ComboBoxItem>Hard</ComboBoxItem>
-                    <ComboBoxItem>Elite</ComboBoxItem>
-                    <ComboBoxItem>Reaper</ComboBoxItem>
-                </ComboBox>
+                <!-- NON-editable: the app's ComboBox template has no editable text box, so IsEditable is
+                     broken under the theme. Items + SelectedItem, like the character selector. -->
+                <ComboBox x:Name="DifficultyBox" Margin="0,2,0,0" />
             </StackPanel>
             <StackPanel Grid.Column="2">
-                <TextBlock Text="Level" Foreground="{StaticResource TextMuted}" FontSize="12" />
-                <TextBox x:Name="LevelBox" Margin="0,2,0,0" />
+                <TextBlock Text="Quest lvl" Foreground="{StaticResource TextMuted}" FontSize="12" />
+                <TextBox x:Name="LevelBox" Width="64" Margin="0,2,0,0" />
+            </StackPanel>
+            <StackPanel Grid.Column="4">
+                <TextBlock Text="Char lvl" Foreground="{StaticResource TextMuted}" FontSize="12" />
+                <TextBox x:Name="CharLevelBox" Width="64" Margin="0,2,0,0" />
             </StackPanel>
         </Grid>
 

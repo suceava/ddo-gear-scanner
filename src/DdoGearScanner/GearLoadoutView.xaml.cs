@@ -374,6 +374,23 @@ public partial class GearLoadoutView : UserControl
         StatusText.Text = $"Switched to {_charStore.Active.Name}.";
     }
 
+    /// <summary>Add a just-DETECTED character (from the shell header's "Add") as a saved profile and make
+    /// it active. Playstyle stays Unknown — the user sets it here on the Gear page. If a same-named
+    /// profile already exists, just activate that one instead of duplicating.</summary>
+    public void AddDetectedCharacter(string name, int? level)
+    {
+        static string N(string? s) => new string((s ?? "").Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        CharacterProfile profile = _charStore.Profiles.FirstOrDefault(p => N(p.Name) == N(name))
+            ?? _charStore.Add(name, Playstyle.Unknown, null, level);
+        _charStore.SetActive(profile.Id);
+        _store.SwitchTo(profile.Id);
+        RefreshLoadout();
+        _crops.Clear();
+        ShowItem(null, null);
+        PopulateCharacters();
+        StatusText.Text = $"Now editing {profile.Name} — set the playstyle so recommendations rank right.";
+    }
+
     private void NewCharacter_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new CharacterEditWindow(null, canDelete: false) { Owner = Window.GetWindow(this) };

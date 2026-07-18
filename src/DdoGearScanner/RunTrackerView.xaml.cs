@@ -251,6 +251,19 @@ public partial class RunTrackerView : UserControl
         _rows.Remove(row);
     }
 
+    // Full editor for a PAST (logged) run — the same dialog the current-run card uses, so every field
+    // (incl. character level, which has no inline column) is fixable. Persists via the store.
+    private void RowEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not RunRow row) return;
+        var dlg = new RunEditWindow(row.Record) { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true && dlg.Result is not null)
+        {
+            _store.Update(dlg.Result);
+            row.Replace(dlg.Result);
+        }
+    }
+
     private void CalibrateRun_Click(object sender, RoutedEventArgs e) => RunCalibrateRequested?.Invoke();
 
     private RunSettingsWindow? _settingsWindow;
@@ -317,9 +330,11 @@ public sealed class RunRow : INotifyPropertyChanged
         }
     }
 
+    // The table "Lvl" column is the QUEST level (matches the editor's "Quest lvl" field). It no longer
+    // falls back to CharacterLevel — that silently showed the char level and disagreed with the editor.
     public string LevelText
     {
-        get => (Record.QuestLevel ?? Record.CharacterLevel)?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        get => Record.QuestLevel?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         set
         {
             int? lvl;
@@ -348,6 +363,15 @@ public sealed class RunRow : INotifyPropertyChanged
 
     public bool Completed => Record.Completed;
     public string Status => Record.Completed ? "Completed" : "Left";
+
+    /// <summary>Replace the whole record (from the full run editor) and refresh every displayed field.</summary>
+    public void Replace(RunRecord r)
+    {
+        Record = r;
+        foreach (string p in new[] { nameof(Dungeon), nameof(Character), nameof(Difficulty), nameof(XpText),
+            nameof(LevelText), nameof(Entered), nameof(Duration), nameof(XpPerMinute), nameof(Completed), nameof(Status) })
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
+    }
 
     private static string Format(TimeSpan t)
         => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
