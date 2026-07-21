@@ -16,6 +16,7 @@ public partial class App : Application
     private FrameGrabber? _grabber;
     private HotkeyTrigger? _trigger;
     private DebugDiagnosticsWindow? _diagWindow;
+    private RunSyncService? _runSync;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -71,6 +72,22 @@ public partial class App : Application
         runPipeline.SetEnabled(settings.RunTrackingEnabled);
         _coordinator.FrameArrived += runPipeline.OnFrame;
 
+        // Cloud sync: push finalized runs to the DDO Gear Planner account when an API key is set in Settings.
+        // The local runs.json stays authoritative; this is a best-effort outbox on top (see RunSyncService).
+        // Character name for a run = the OCR'd avatar name, else the active gear-profile's name.
+        RunSyncClient syncClient = new(
+            () => string.IsNullOrWhiteSpace(settings.SyncApiKey)
+                ? null
+                : new SyncConfig(settings.SyncApiKey.Trim(), settings.SyncApiBase.Trim()),
+            run => !string.IsNullOrWhiteSpace(run.CharacterName)
+                ? run.CharacterName!
+                : charStore.Profiles.FirstOrDefault(p => p.Id == run.CharacterId)?.Name ?? "Unknown");
+        _runSync = new RunSyncService(runStore, syncClient);
+        settings.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(AppSettings.SyncApiKey) or nameof(AppSettings.SyncApiBase)) _runSync?.Start();
+        };
+
         // Inventory slot detection (rag-doll anchor + calibrated slot offsets). Template is embedded.
         InventoryLocator? invLocator = InventoryLocator.TryLoadEmbedded();
         SlotMap slotMap = SlotMap.Load();
@@ -85,6 +102,10 @@ public partial class App : Application
         // The "DDO Companion" shell hosts the Gear Loadout + Run Tracker pages; App routes the
         // gear/run pipeline events to the embedded views via main.Gear / main.Run.
         ShellWindow main = new(store, charStore, runStore, runPipeline, settings, reader.IsAvailable);
+        // Cloud-sync status shows in the Run tracker's control bar; subscribe before the first drain so the
+        // initial state paints, then kick off a drain of anything unsynced from a previous session.
+        _runSync.StatusChanged += main.Run.SetSyncStatus;
+        _runSync.Start();
         main.Gear.DetectionToggleRequested += () => pipeline.ToggleSession();
         main.Gear.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
 
@@ -221,6 +242,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _runSync?.Dispose();
         _trigger?.Dispose();
         _coordinator?.Dispose();
         _grabber?.Dispose();

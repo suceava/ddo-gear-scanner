@@ -111,6 +111,17 @@ public sealed class AppSettings : INotifyPropertyChanged
     private string _openRouterModel = "google/gemini-2.5-flash";
     public string OpenRouterModel { get => _openRouterModel; set => Set(ref _openRouterModel, value); }
 
+    // ---- Cloud sync (DDO Gear Planner account) ----
+    // Per-user API key minted at ddo.gnarlybits.com → Account, pasted here. When set, finalized runs are
+    // pushed to the account (name-scoped to that user). Empty = sync off (runs stay local). Stored plaintext
+    // by explicit user choice, like the OpenRouter key.
+    private string _syncApiKey = string.Empty;
+    public string SyncApiKey { get => _syncApiKey; set => Set(ref _syncApiKey, value); }
+
+    // Base URL of the run-tracker API. Overridable without a rebuild (dev/staging); default is prod.
+    private string _syncApiBase = "https://ddo-api.gnarlybits.com";
+    public string SyncApiBase { get => _syncApiBase; set => Set(ref _syncApiBase, value); }
+
     // Stacking-matrix window bounds (NaN => center on first open).
     private double _matrixLeft = double.NaN;
     public double MatrixLeft { get => _matrixLeft; set => Set(ref _matrixLeft, value); }
@@ -229,6 +240,8 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.LlmEnabled = loaded.LlmEnabled;
                     s.OpenRouterApiKey = loaded.OpenRouterApiKey ?? string.Empty;
                     s.OpenRouterModel = string.IsNullOrWhiteSpace(loaded.OpenRouterModel) ? s.OpenRouterModel : loaded.OpenRouterModel;
+                    s.SyncApiKey = loaded.SyncApiKey ?? string.Empty;
+                    s.SyncApiBase = string.IsNullOrWhiteSpace(loaded.SyncApiBase) ? s.SyncApiBase : loaded.SyncApiBase;
                     s.MatrixLeft = loaded.MatrixLeft;
                     s.MatrixTop = loaded.MatrixTop;
                     s.MatrixWidth = loaded.MatrixWidth;

@@ -33,6 +33,25 @@ public partial class RunTrackerView : UserControl
     /// <summary>Raised when the user clicks the Calibrate Run Regions button (App opens the calibrator).</summary>
     public event Action? RunCalibrateRequested;
 
+    /// <summary>Live cloud-sync status shown in the control bar. Wired from RunSyncService in App.</summary>
+    public void SetSyncStatus(SyncStatus s) => Dispatcher.BeginInvoke(() =>
+    {
+        (string text, Brush color, string tip) = s.State switch
+        {
+            SyncState.Syncing => ($"☁ Syncing{(s.Pending > 0 ? $" {s.Pending}…" : "…")}", (Brush)FindResource("GoldBright"),
+                "Pushing runs to your DDO Gear Planner account"),
+            SyncState.Synced => ("☁ Synced", new SolidColorBrush(Color.FromRgb(0x8F, 0xCF, 0x8A)),
+                "All runs are synced to your account"),
+            SyncState.Error => ("☁ Sync error", new SolidColorBrush(Color.FromRgb(0xE0, 0x68, 0x5C)),
+                s.Detail ?? "Sync failed — see log"),
+            _ => ("☁ Sync off", (Brush)FindResource("TextMuted"),
+                "Add your DDO Gear Planner key in Settings to sync runs"),
+        };
+        SyncStatusText.Text = text;
+        SyncStatusText.Foreground = color;
+        SyncStatusText.ToolTip = tip;
+    });
+
     public RunTrackerView(RunStore store, CharacterStore charStore, RunTrackerPipeline pipeline, AppSettings settings)
     {
         InitializeComponent();

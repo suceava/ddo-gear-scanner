@@ -34,5 +34,22 @@ public partial class SettingsWindow : Window
         finally { TestButton.IsEnabled = true; }
     }
 
+    private async void SyncTest_Click(object sender, RoutedEventArgs e)
+    {
+        SyncTestButton.IsEnabled = false;
+        SyncTestResult.Text = "Checking…";
+        try
+        {
+            AppSettings s = AppSettings.Instance;
+            RunSyncClient client = new(
+                () => string.IsNullOrWhiteSpace(s.SyncApiKey) ? null : new SyncConfig(s.SyncApiKey.Trim(), s.SyncApiBase.Trim()),
+                _ => "n/a");
+            (bool ok, string detail) = await client.ValidateAsync();
+            SyncTestResult.Text = (ok ? "✓ " : "✗ ") + detail;
+        }
+        catch (Exception ex) { SyncTestResult.Text = "✗ " + ex.Message; }
+        finally { SyncTestButton.IsEnabled = true; }
+    }
+
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 }

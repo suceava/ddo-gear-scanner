@@ -38,7 +38,10 @@ public sealed record RunRecord(
     // timer. PausedUtc is when it froze; on Resume the pipeline shifts EnteredUtc forward by the paused
     // span so elapsed continues seamlessly. A finalized/logged run is never Paused.
     bool Paused = false,
-    DateTime? PausedUtc = null)
+    DateTime? PausedUtc = null,
+    // Cloud-sync bookkeeping: true once this run has been pushed to the DDO Gear Planner account. Editing a
+    // run resets it to false (dirty → re-push). Not shown in the UI; persisted so the outbox survives restarts.
+    bool Synced = false)
 {
     /// <summary>Elapsed run time, honoring a pause (frozen at <see cref="PausedUtc"/> while paused).</summary>
     public TimeSpan Elapsed(DateTime nowUtc)

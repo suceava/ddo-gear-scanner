@@ -151,6 +151,25 @@ DataGrid of **all runs** (`RunStore.AllNewestFirst`) with editable Dungeon/Chara
 a ✓/↩ status glyph, and a hover-reveal ✕ delete. `runs.json` persists everything. Tracking is always on
 (no toggle — a user would never want it off). Wiki links via `QuestWiki.Slug`.
 
+## Cloud sync (runs → DDO Gear Planner account)
+
+The run tracker pushes finalized runs to the sibling **DDO Gear Planner** web backend (separate repo; API
+at `ddo-api.gnarlybits.com`, wire contract in that repo's `backend/CONTRACT.md`). Local `runs.json` stays
+authoritative — this is a best-effort **outbox** layered on top:
+- **Auth** = a per-user API key minted at `ddo.gnarlybits.com` → Account, pasted into **Settings → DDO Gear
+  Planner account** (`AppSettings.SyncApiKey`; `SyncApiBase` overrides the URL). "Test connection" hits `GET /me`.
+- **`RunStore` is the outbox**: thread-safe (locked — the pipeline adds from the capture thread, the UI edits
+  from the dispatcher, the sync worker marks from a background task), raises `RunSaved`/`RunRemoved`, and each
+  run carries a `Synced` flag. `MarkSynced` records a push WITHOUT firing `RunSaved` (no re-push loop); editing
+  a run resets Synced=false → re-push.
+- **`RunSyncService`** drains on save (debounced batch `POST /runs`), on startup, and every 2 min (picks up
+  anything left unsynced while offline/key-less); deletes propagate via `DELETE /runs/{id}` (best-effort — a
+  failed delete can orphan a server row). Never blocks the capture thread. `RunSyncClient` maps `RunRecord` →
+  the wire shape (drops CharacterId + transient Paused/PausedUtc; character name = OCR'd name, else the active
+  profile, else "Unknown"). `[sync]` log lines trace pushes/deletes.
+- **Status** shows live in the Run tracker control bar — ☁ Sync off / Syncing N… / Synced / Sync error
+  (`RunSyncService.StatusChanged` → `RunTrackerView.SetSyncStatus`). That's the user-facing "did it work".
+
 ## Debug system
 
 A global `AppSettings.DebugMode` toggle gates everything. `DebugSettingsWindow` (shell ☰ menu) is
@@ -229,11 +248,12 @@ dropdown) — only stacking comes from the data.
 
 ## Two-app context
 
-Sibling project (design stage, NOT this repo): a web DDO gear planner (scrapes ddowiki, reverse
-stat-finding, tetris/matrix stacking-puzzle). Its weakness: DDO has no gear export. This desktop
-tool is that missing auto-import. The loadout UI here was deliberately reshaped toward the planner's
-"slot list = character sheet" shape. v1 ignores the web app/backend; the `Mod{Stat,Value,BonusType}`
-model is aligned for cheap integration later.
+Sibling project (separate repo, **now live**): the **DDO Gear Planner** web app (`ddo.gnarlybits.com`) —
+named-item browser + reverse stat-finding + inventory, plus a run-tracker backend (`ddo-api.gnarlybits.com`).
+DDO has no gear export; this desktop tool is that missing auto-import. The loadout UI here was reshaped
+toward the planner's "slot list = character sheet" shape, and the `Mod{Stat,Value,BonusType}` model is
+aligned to it. **Runs already sync** to the backend (see "Cloud sync"); **gear push is still TODO** (the
+next integration — same account/key, a gear/loadout endpoint on the backend).
 
 ## Build / test / run
 
@@ -253,5 +273,6 @@ Working: capture, motion detection, hotkey-over-game, overlay highlight, slot ca
 **AI reading via OpenRouter** (user setting; event reads only — the early no-AI stance was lifted once
 local OCR plateaued ~75-80%; local OCR remains the always-on fallback and the polling engine). Window
 placement persists correctly across mixed-DPI monitors (restore gated + re-applied post-render; maximize
-sequenced after the move). Next candidates: legacy/variant mod diffing + badges (see LEGACY_ITEMS.md);
-run-history analytics on the web app; the backend push (gear + runs).
+sequenced after the move). **Runs now sync to the web account** (see "Cloud sync" — outbox + live status).
+Next candidates: legacy/variant mod diffing + badges (see LEGACY_ITEMS.md); the **gear/loadout push** to the
+backend (runs done, gear is the remaining half); run-history analytics/charting on the web app.
