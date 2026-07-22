@@ -103,6 +103,7 @@ public sealed class RunTrackerPipeline
     private IReadOnlyList<string> _lastChatLines = Array.Empty<string>();  // previous chat lines (debug view only)
     private bool _completionPresent;    // was "Adventure Completed" present in the last chat read (rising-edge detect)
     private bool _completionBaselined;  // has this run taken its first chat read (baseline) yet
+    private bool _xpPresent;            // was a "receive N XP" line present last read (rising-edge, same guard as completion)
     private int? _runXp;                // latest "receive N XP" seen in chat this run (XP is chat-only)
     private string? _detectedName;     // latest character name OCR'd from the avatar region
     private int? _detectedLevel;       // latest character level OCR'd from the avatar region
@@ -418,14 +419,23 @@ public sealed class RunTrackerPipeline
                     // first chat read so a stale completion still scrolled in from the prior quest can't
                     // fire it; MinRunSeconds is a second guard.
                     bool completionNow = chatLines.Any(RunTextParser.IsAdventureCompleted);
-                    if (!_completionBaselined) _completionBaselined = true;                 // first read: baseline only
-                    else if (completionNow && !_completionPresent) freshChat = true;        // absent → present
-                    _completionPresent = completionNow;
+                    int? xpNow = RunTextParser.ExtractChatXp(chatLines);
+                    bool xpNowPresent = xpNow is not null;
 
-                    // XP only ever appears in chat ("You receive N XP") — even when the TRACKER's
-                    // "Completed" is what finalizes the run. So capture the latest visible value every read
-                    // and let Apply keep the newest seen this run, ready for whichever signal completes it.
-                    chatXp = RunTextParser.ExtractChatXp(chatLines);
+                    // First chat read of the run only BASELINES — a completion OR a receive-XP line that's
+                    // already sitting in the log (lingering from the PREVIOUS quest) must not fire. After
+                    // that, both fire on a rising edge (absent → present).
+                    if (!_completionBaselined) _completionBaselined = true;                 // first read: baseline only
+                    else
+                    {
+                        if (completionNow && !_completionPresent) freshChat = true;          // new "Adventure Completed"
+                        // XP only appears in chat ("You receive N XP") — even when the TRACKER's "Completed"
+                        // finalizes the run. Capture on the rising edge so a stale prior-quest XP line that's
+                        // still visible when this run starts can't be picked up as this run's XP.
+                        if (xpNowPresent && !_xpPresent) chatXp = xpNow;                     // new XP award
+                    }
+                    _completionPresent = completionNow;
+                    _xpPresent = xpNowPresent;
 
                     // Kept only to feed the debug chat view.
                     IReadOnlyList<string> newLines = NewChatLines(chatLines, _lastChatLines);
