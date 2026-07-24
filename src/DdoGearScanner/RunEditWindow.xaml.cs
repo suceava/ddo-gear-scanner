@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Input;
 using DdoGearScanner.Model;
 
 namespace DdoGearScanner;
@@ -24,13 +25,10 @@ public partial class RunEditWindow : Window
         LevelBox.Text = run.QuestLevel?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         CharLevelBox.Text = run.CharacterLevel?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         XpBox.Text = run.Xp?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+        TimeBox.Text = run.Duration is { } d ? Fmt(d) : string.Empty;
 
-        // XP is only known at completion — don't offer to edit it on an in-progress run.
-        if (!run.Completed)
-        {
-            XpLabel.Visibility = Visibility.Collapsed;
-            XpBox.Visibility = Visibility.Collapsed;
-        }
+        // Time + XP are completion data — an in-progress run's timer is live, so hide the row.
+        if (!run.Completed) CompletionRow.Visibility = Visibility.Collapsed;
 
         // The app's themed ComboBox template is display-only (no editable text box), so difficulty is a
         // NON-editable pick list driven by SelectedItem — the pattern that already works for the character
@@ -47,9 +45,28 @@ public partial class RunEditWindow : Window
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
-        int? level = int.TryParse(LevelBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int lv) ? lv : null;
-        int? charLevel = int.TryParse(CharLevelBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int cl) ? cl : null;
-        int? xp = int.TryParse(XpBox.Text.Trim().Replace(",", ""), NumberStyles.Integer, CultureInfo.InvariantCulture, out int x) ? x : null;
+        int? level = ParseInt(LevelBox.Text);
+        int? charLevel = ParseInt(CharLevelBox.Text);
+        int? xp = ParseInt(XpBox.Text);
+
+        // Validate the time. Empty is fine (keeps the existing duration); non-empty must be a real
+        // duration (m:ss / h:mm:ss with seconds & minutes under 60 — so "22:84" is rejected, not silently
+        // normalized). Editing time keeps the real start and moves the end.
+        DateTime? completed = _run.CompletedUtc;
+        string timeText = TimeBox.Text.Trim();
+        if (_run.Completed && timeText.Length > 0)
+        {
+            if (ParseDuration(timeText) is not { } dur || dur <= TimeSpan.Zero)
+            {
+                ShowError("Time must look like 17:23 or 1:17:23 — minutes and seconds under 60.");
+                return;
+            }
+            completed = _run.EnteredUtc + dur;
+        }
+
+        if (level is < 1 or > 40) { ShowError("Quest level must be 1–40."); return; }
+        if (charLevel is < 1 or > 40) { ShowError("Character level must be 1–40."); return; }
+
         Result = _run with
         {
             DungeonName = NameBox.Text.Trim(),
@@ -58,10 +75,54 @@ public partial class RunEditWindow : Window
             QuestLevel = level,
             CharacterLevel = charLevel,
             Xp = xp,
+            CompletedUtc = completed,
             Edited = true,
         };
         DialogResult = true;
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+
+    private void ShowError(string msg)
+    {
+        ErrorText.Text = msg;
+        ErrorText.Visibility = Visibility.Visible;
+    }
+
+    // ---- input guards: block non-digits (number fields) / non-time chars (time field), typed or pasted ----
+    private void Digits_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        => e.Handled = !e.Text.All(char.IsDigit);
+
+    private void TimeChars_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        => e.Handled = !e.Text.All(c => char.IsDigit(c) || c == ':');
+
+    private static void GuardPaste(DataObjectPastingEventArgs e, Func<char, bool> allowed)
+    {
+        string? s = e.DataObject.GetData(typeof(string)) as string;
+        if (s is null || !s.All(allowed)) e.CancelCommand();
+    }
+    private void Digits_Pasting(object sender, DataObjectPastingEventArgs e) => GuardPaste(e, char.IsDigit);
+    private void TimeChars_Pasting(object sender, DataObjectPastingEventArgs e) => GuardPaste(e, c => char.IsDigit(c) || c == ':');
+
+    private static int? ParseInt(string s)
+        => int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? n : null;
+
+    private static string Fmt(TimeSpan t) => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
+
+    /// <summary>Parse + VALIDATE a run duration: "M" (minutes), "M:SS", or "H:MM:SS". Seconds and the
+    /// h:mm:ss minutes must be 0–59 (so "22:84" is rejected, not normalized). Null if invalid.</summary>
+    private static TimeSpan? ParseDuration(string s)
+    {
+        string[] p = s.Trim().Split(':');
+        if (p.Length is < 1 or > 3 || p.Any(x => !int.TryParse(x, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)))
+            return null;
+        int[] v = p.Select(x => int.Parse(x, CultureInfo.InvariantCulture)).ToArray();
+        return p.Length switch
+        {
+            1 => TimeSpan.FromMinutes(v[0]),                                  // plain minutes
+            2 when v[1] is >= 0 and < 60 && v[0] >= 0 => new TimeSpan(0, v[0], v[1]),
+            3 when v[1] is >= 0 and < 60 && v[2] is >= 0 and < 60 && v[0] >= 0 => new TimeSpan(v[0], v[1], v[2]),
+            _ => null,
+        };
+    }
 }

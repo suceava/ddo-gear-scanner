@@ -10,17 +10,31 @@
         <TextBlock Text="Edit run" FontSize="17" Style="{StaticResource Title}" Margin="0,0,0,14" />
 
         <TextBlock Text="Quest" Foreground="{StaticResource TextMuted}" FontSize="12" />
-        <TextBox x:Name="NameBox" Margin="0,2,0,12" />
+        <TextBox x:Name="NameBox" Margin="0,2,0,12" MaxLength="80" />
 
-        <TextBlock Text="Character" Foreground="{StaticResource TextMuted}" FontSize="12" />
-        <TextBox x:Name="CharacterBox" Margin="0,2,0,12" />
-
+        <!-- Character + Char lvl -->
         <Grid Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="14" />
+                <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="10" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="Character" Foreground="{StaticResource TextMuted}" FontSize="12" />
+                <TextBox x:Name="CharacterBox" Margin="0,2,0,0" MaxLength="40" />
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="Char lvl" Foreground="{StaticResource TextMuted}" FontSize="12" />
+                <TextBox x:Name="CharLevelBox" Width="64" Margin="0,2,0,0" MaxLength="2"
+                         PreviewTextInput="Digits_PreviewTextInput" DataObject.Pasting="Digits_Pasting" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Difficulty + Quest lvl -->
+        <Grid Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
@@ -31,16 +45,35 @@
             </StackPanel>
             <StackPanel Grid.Column="2">
                 <TextBlock Text="Quest lvl" Foreground="{StaticResource TextMuted}" FontSize="12" />
-                <TextBox x:Name="LevelBox" Width="64" Margin="0,2,0,0" />
-            </StackPanel>
-            <StackPanel Grid.Column="4">
-                <TextBlock Text="Char lvl" Foreground="{StaticResource TextMuted}" FontSize="12" />
-                <TextBox x:Name="CharLevelBox" Width="64" Margin="0,2,0,0" />
+                <TextBox x:Name="LevelBox" Width="64" Margin="0,2,0,0" MaxLength="2"
+                         PreviewTextInput="Digits_PreviewTextInput" DataObject.Pasting="Digits_Pasting" />
             </StackPanel>
         </Grid>
 
-        <TextBlock x:Name="XpLabel" Text="XP" Foreground="{StaticResource TextMuted}" FontSize="12" />
-        <TextBox x:Name="XpBox" Margin="0,2,0,16" />
+        <!-- XP + Time — order matches the history table (XP then Time). Completion data: the whole row
+             hides for an in-progress run (its timer is live). -->
+        <Grid x:Name="CompletionRow" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="XP" Foreground="{StaticResource TextMuted}" FontSize="12" />
+                <TextBox x:Name="XpBox" Margin="0,2,0,0" MaxLength="9"
+                         PreviewTextInput="Digits_PreviewTextInput" DataObject.Pasting="Digits_Pasting" />
+            </StackPanel>
+            <StackPanel Grid.Column="2">
+                <TextBlock Text="Time" Foreground="{StaticResource TextMuted}" FontSize="12" />
+                <TextBox x:Name="TimeBox" Width="110" Margin="0,2,0,0" MaxLength="8"
+                         PreviewTextInput="TimeChars_PreviewTextInput" DataObject.Pasting="TimeChars_Pasting"
+                         ToolTip="How long the run took. Type minutes:seconds (17:23) or hours:minutes:seconds (1:17:23)." />
+                <TextBlock Text="e.g. 17:23" Foreground="{StaticResource TextMuted}" FontSize="10.5" Margin="0,2,0,0" />
+            </StackPanel>
+        </Grid>
+
+        <TextBlock x:Name="ErrorText" Foreground="#E0685C" FontSize="12" TextWrapping="Wrap"
+                   Visibility="Collapsed" Margin="0,0,0,10" />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Cancel" Click="Cancel_Click" Margin="0,0,8,0" IsCancel="True" />

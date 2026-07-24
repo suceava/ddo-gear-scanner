@@ -182,6 +182,11 @@ public partial class App : Application
         main.Show();
         ApplyDiagWindow();   // now that main is shown, the diag window may take Owner = main
 
+        // Restore an in-progress run lost to a crash/restart mid-quest (the Run view is now subscribed, so
+        // its card updates). Dropped if it started too long ago to still be real.
+        if (ActiveRunStore.Load(TimeSpan.FromHours(8)) is { } activeRun)
+            runPipeline.RestoreActiveRun(activeRun);
+
         if (slotMap.IsDefault && reader.IsAvailable)
             main.Gear.SetStatusText("Using the built-in 2560×1440 slot calibration. If slots don't detect, recalibrate via ☰ Menu → Calibrate Slots.");
 

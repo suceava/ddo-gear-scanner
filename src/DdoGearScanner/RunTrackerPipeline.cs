@@ -164,9 +164,36 @@ public sealed class RunTrackerPipeline
         _chatRegion = chatRegion;
         _avatarRegion = avatarRegion;
         _llm = llm;
+
+        // Persist the in-progress run so a crash/restart mid-quest doesn't lose it. CurrentChanged fires on
+        // every meaningful change to _current (start/pause/resume/edit/finalize); the store saves an
+        // in-progress run and clears the file once it's completed or null.
+        CurrentChanged += ActiveRunStore.Save;
     }
 
     private readonly OpenRouterRunReader? _llm;
+
+    /// <summary>Restore a previously-persisted in-progress run on startup (see <see cref="ActiveRunStore"/>).
+    /// The card + timer resume from the run's real enteredUtc; detection re-engages (completion re-baselined
+    /// so a stale chat line can't instantly finish it). No-op if a run is already active.</summary>
+    public void RestoreActiveRun(RunRecord run)
+    {
+        RunRecord restored;
+        lock (_lock)
+        {
+            if (_current is not null || run.Completed) return;
+            _current = run;
+            restored = run;
+            _sawEmptySinceFinalize = false;
+            _completionBaselined = false;             // re-baseline the completion rising-edge on the next read
+            _lastChatLines = Array.Empty<string>();
+            _runXp = run.Xp;
+            _emptySinceTick = 0;
+            _leftTicks = 0;
+        }
+        Log($"restored active run \"{restored.DungeonName}\" (entered {restored.EnteredUtc.ToLocalTime():HH:mm})");
+        CurrentChanged?.Invoke(restored);
+    }
 
     public bool Enabled => _enabled;
     public RunRecord? Current { get { lock (_lock) { return _current; } } }

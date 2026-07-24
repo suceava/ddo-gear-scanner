@@ -254,33 +254,39 @@ public partial class RunTrackerView : UserControl
     private static string Fmt(TimeSpan t)
         => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
 
-    // Persist a row after an inline edit.
+    // Row edits go through the store (kept for RunRow's callback signature; edits now come via EditSelected).
     private void Persist(RunRow row) => _store.Update(row.Record);
 
-    private void Grid_CellEditEnding(object? sender, DataGridCellEditEndingEventArgs e)
+    // Editing a run is ONE consistent path: select a row, then Edit (toolbar or double-click) opens the full
+    // editor for every field. The table itself is read-only — no more some-cells-inline/some-not.
+    private void Grid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        // The bound property setter already persisted; nothing extra needed here. (Hook kept so the
-        // commit path is explicit and easy to extend, e.g. re-sorting.)
+        bool has = Grid.SelectedItem is RunRow;
+        EditRunButton.IsEnabled = has;
+        DeleteRunButton.IsEnabled = has;
     }
 
-    private void Delete_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.DataContext is not RunRow row) return;
-        _store.Remove(row.Record.Id);
-        _rows.Remove(row);
-    }
+    private void EditSelected_Click(object sender, RoutedEventArgs e) => EditSelectedRun();
 
-    // Full editor for a PAST (logged) run — the same dialog the current-run card uses, so every field
-    // (incl. character level, which has no inline column) is fixable. Persists via the store.
-    private void RowEdit_Click(object sender, RoutedEventArgs e)
+    private void EditSelectedRun()
     {
-        if ((sender as FrameworkElement)?.DataContext is not RunRow row) return;
+        if (Grid.SelectedItem is not RunRow row) return;
         var dlg = new RunEditWindow(row.Record) { Owner = Window.GetWindow(this) };
         if (dlg.ShowDialog() == true && dlg.Result is not null)
         {
-            _store.Update(dlg.Result);
+            _store.Update(dlg.Result);   // marks Synced=false → re-pushes to the account
             row.Replace(dlg.Result);
         }
+    }
+
+    private void DeleteSelected_Click(object sender, RoutedEventArgs e)
+    {
+        if (Grid.SelectedItem is not RunRow row) return;
+        string what = string.IsNullOrWhiteSpace(row.Record.DungeonName) ? "this run" : $"\"{row.Record.DungeonName}\"";
+        if (MessageBox.Show($"Delete {what}? This can't be undone.", "DDO Companion",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        _store.Remove(row.Record.Id);
+        _rows.Remove(row);
     }
 
     private void CalibrateRun_Click(object sender, RoutedEventArgs e) => RunCalibrateRequested?.Invoke();

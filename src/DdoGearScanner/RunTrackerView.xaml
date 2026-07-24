@@ -35,62 +35,6 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Row edit: hover-reveal pencil that opens the full run editor (incl. character level). -->
-        <Style x:Key="RowEditButton" TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="Visibility" Value="Hidden" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="ToolTip" Value="Edit this run" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="Transparent" Padding="6,2">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
-                    <Setter Property="Visibility" Value="Visible" />
-                </DataTrigger>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Foreground" Value="{StaticResource GoldBright}" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
-        <!-- Row delete: a borderless glyph that only appears when you hover the row. -->
-        <Style x:Key="RowDeleteButton" TargetType="Button">
-            <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="Visibility" Value="Hidden" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="ToolTip" Value="Delete this run" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="Transparent" Padding="6,2">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=DataGridRow}}" Value="True">
-                    <Setter Property="Visibility" Value="Visible" />
-                </DataTrigger>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Foreground" Value="#E0685C" />
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-
     </UserControl.Resources>
 
     <DockPanel>
@@ -163,12 +107,25 @@
             </Grid>
         </Border>
 
-        <DataGrid x:Name="Grid" Margin="20,12" AutoGenerateColumns="False" CanUserAddRows="False"
+        <!-- History toolbar: select a run, then Edit / Delete. Buttons are always visible but DISABLED
+             until a row is selected, so it's self-evident you pick a run first. -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource BgWindow}" Padding="20,10,20,0">
+            <DockPanel LastChildFill="False">
+                <TextBlock DockPanel.Dock="Left" Text="History" Style="{StaticResource Section}" VerticalAlignment="Center" />
+                <Button x:Name="DeleteRunButton" DockPanel.Dock="Right" Content="🗑 Delete" Click="DeleteSelected_Click"
+                        IsEnabled="False" VerticalAlignment="Center" ToolTip="Select a run to delete" />
+                <Button x:Name="EditRunButton" DockPanel.Dock="Right" Content="✎ Edit" Click="EditSelected_Click"
+                        IsEnabled="False" Margin="0,0,8,0" VerticalAlignment="Center" ToolTip="Select a run to edit" />
+            </DockPanel>
+        </Border>
+
+        <DataGrid x:Name="Grid" Margin="20,10,20,12" AutoGenerateColumns="False" CanUserAddRows="False"
                   CanUserDeleteRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                  IsReadOnly="True" SelectionChanged="Grid_SelectionChanged"
                   HorizontalGridLinesBrush="{StaticResource BorderDim}" Background="{StaticResource BgWindow}"
                   RowBackground="{StaticResource BgPanel}" AlternatingRowBackground="{StaticResource BgPanelAlt}"
                   BorderBrush="{StaticResource BorderDim}" BorderThickness="1" SelectionMode="Single"
-                  CellEditEnding="Grid_CellEditEnding" ColumnWidth="Auto" RowHeight="30">
+                  ColumnWidth="Auto" RowHeight="30">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Dungeon" Binding="{Binding Dungeon}" Width="*" MinWidth="120">
                     <DataGridTextColumn.ElementStyle>
@@ -211,20 +168,6 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="" Width="34">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button Style="{StaticResource RowEditButton}" Content="✎" Click="RowEdit_Click" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTemplateColumn Header="" Width="38">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Button Style="{StaticResource RowDeleteButton}" Content="✕" Click="Delete_Click" />
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>

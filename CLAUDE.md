@@ -139,17 +139,25 @@ since pausing / cancelling / "just stepped out" are all real.
 **UI (`RunTrackerView`):** a Current-Run card (quest name = title, colored status **badge** —
 IN PROGRESS / **PAUSED** (amber) / COMPLETED, big timer, chips incl. **Character**, helper text) with
 manual **Start / Complete / Pause·Resume / Cancel** overrides and a single **✎ Edit** dialog
-(`RunEditWindow`) that fixes ANY field consistently (name / character / difficulty / level / XP — XP is
-hidden for an in-progress run since it's unknown until completion; the difficulty combo is set on Loaded
-so the OCR'd value shows). **Pause** freezes the timer (the pipeline shifts EnteredUtc forward on Resume
+(`RunEditWindow`) that fixes ANY field consistently (name / character + char-level / difficulty / quest
+level / XP / **Time**). The XP+Time row hides for an in-progress run (unknown until completion); editing
+Time keeps the real start and moves the end (`CompletedUtc = EnteredUtc + duration`). Inputs are guarded
+— length caps, digit-only number fields, a time field that accepts `m:ss`/`h:mm:ss` and **validates** (so
+"22:84" is rejected, not silently normalized) with an inline error label; levels are 1–40. The difficulty
+combo is **non-editable + SelectedItem** (the app theme re-templates ComboBox display-only, so `IsEditable`
+is broken app-wide — this is the character-selector pattern). **Pause** freezes the timer (the pipeline shifts EnteredUtc forward on Resume
 so elapsed continues seamlessly) and **suspends all completion/left detection** so town time can't finish
 or cancel it. When "left" is detected mid-run, a **banner** offers ⏸ Pause / ▸ Keep going / Cancel run —
 the run keeps running (timer + detection) until you choose; "Keep going" suppresses re-prompting until
 you're back inside. A **Settings** window (`RunSettingsWindow`) has an **auto-open-wiki-on-start** toggle
 (off by default); an "↗ Wiki" button shows on the current run only — never in the table. History is a
-DataGrid of **all runs** (`RunStore.AllNewestFirst`) with editable Dungeon/Character/Difficulty/Level/XP,
-a ✓/↩ status glyph, and a hover-reveal ✕ delete. `runs.json` persists everything. Tracking is always on
-(no toggle — a user would never want it off). Wiki links via `QuestWiki.Slug`.
+**read-only** DataGrid of **all runs** (`RunStore.AllNewestFirst`) with a ✓/↩ status glyph, plus a
+**History toolbar** with **✎ Edit** / **🗑 Delete** buttons that are visible-but-disabled until a row is
+selected (select-then-act; both open/confirm — delete is NOT buried in the edit dialog). `runs.json`
+persists FINALIZED runs; the single **in-progress** run is separately persisted to `active-run.json`
+(`ActiveRunStore`, wired to the pipeline's `CurrentChanged`) and **restored on startup** if under 8h old
+(card + timer + paused state resume from the real EnteredUtc; older is dropped so no phantom run comes
+back). Tracking is always on (no toggle — a user would never want it off). Wiki links via `QuestWiki.Slug`.
 
 ## Cloud sync (runs → DDO Gear Planner account)
 
