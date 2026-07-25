@@ -51,8 +51,29 @@ public class RunReconcilerTests
         RunRecord merged = Assert.Single(r.Runs);
         Assert.Equal(99999, merged.Xp);
         Assert.Equal("c1", merged.CharacterId);      // local-only field kept
-        Assert.Equal(Entered, merged.EnteredUtc);     // immutable anchor kept
         Assert.True(merged.Synced);
+    }
+
+    [Fact]
+    public void AdoptsServerEnteredUtc_soAWebTimeEditStaysExact_no40x34to40x33()
+    {
+        // The reported bug: local kept sub-ms tick precision on EnteredUtc, but the web computed CompletedUtc
+        // from the ms-truncated enteredUtc. Keeping the local EnteredUtc left the duration a hair short and the
+        // desktop's truncating m:ss format dropped a whole second. Adopting the server's EnteredUtc fixes it.
+        DateTime enteredMs = new(2026, 7, 10, 18, 20, 0, DateTimeKind.Utc);   // ms precision (as on the wire)
+        DateTime localEntered = enteredMs.AddTicks(3456);                     // sub-ms precision the desktop had
+        var local = new[]
+        {
+            Run("a", synced: true) with { EnteredUtc = localEntered, CompletedUtc = localEntered.AddSeconds(2435) },
+        };
+        // Web set the time to 40:34 → completedUtc = enteredMs + 2434s (built off the ms value).
+        var server = new[] { FromServer("a") with { EnteredUtc = enteredMs, CompletedUtc = enteredMs.AddSeconds(2434) } };
+
+        RunReconciler.Result r = RunReconciler.Merge(local, server);
+        RunRecord merged = Assert.Single(r.Runs);
+        Assert.True(r.Changed);
+        Assert.Equal(enteredMs, merged.EnteredUtc);                    // took the server's entered, not local's
+        Assert.Equal(TimeSpan.FromSeconds(2434), merged.Duration);     // exactly 40:34, not 40:33.999…
     }
 
     [Fact]

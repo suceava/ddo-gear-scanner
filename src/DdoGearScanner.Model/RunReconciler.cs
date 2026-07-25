@@ -5,8 +5,9 @@ namespace DdoGearScanner.Model;
 /// testable). Given the local runs and the server's runs, produces the reconciled set. Rules — the server is
 /// the source of truth for HISTORY, local is a cache + outbox:
 ///  - local not-yet-pushed (Synced=false) → KEEP (outbox wins until it pushes; a server copy is ignored).
-///  - local synced &amp; on server → ADOPT the server's version (a web edit), preserving the local-only
-///    CharacterId and the immutable EnteredUtc anchor.
+///  - local synced &amp; on server → ADOPT the server's version (a web edit), keeping only the local-only
+///    CharacterId. EnteredUtc comes from the server too, so it and CompletedUtc share one precision (else a
+///    web time-edit renders a second short — see the SameSecond note / the adopt site).
 ///  - local synced &amp; ABSENT from server → a web delete → DROP.
 ///  - server-only → ADD (restores history on a fresh install / another PC).
 /// SAFETY: an EMPTY server list never deletes anything — that guards a bad key or a first sync (lots of
@@ -35,7 +36,12 @@ public static class RunReconciler
             }
             if (byId.TryGetValue(l.Id, out RunRecord? srv))
             {
-                RunRecord adopted = srv with { CharacterId = l.CharacterId ?? srv.CharacterId, EnteredUtc = l.EnteredUtc };
+                // Adopt the server's version, but keep the local-only CharacterId (the wire never carries it).
+                // We take the server's EnteredUtc too — NOT the local one — so EnteredUtc and CompletedUtc come
+                // from the same (millisecond) source. Mixing local sub-ms EnteredUtc with a server CompletedUtc
+                // (which the web built off the ms-truncated enteredUtc) left the duration a hair short, and the
+                // desktop's truncating m:ss format then dropped a whole second (e.g. an edited 40:34 → 40:33).
+                RunRecord adopted = srv with { CharacterId = l.CharacterId ?? srv.CharacterId };
                 if (!SyncEqual(adopted, l)) changed = true;
                 next.Add(adopted);
                 byId.Remove(l.Id);
