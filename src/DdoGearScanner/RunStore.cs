@@ -31,6 +31,10 @@ public sealed class RunStore
     /// <summary>A run was deleted (its id) — a delete for the cloud outbox. Fired outside the lock.</summary>
     public event Action<string>? RunRemoved;
 
+    /// <summary>The set of runs changed because of a PULL from the server (a web edit/delete came down), not a
+    /// local action. The UI reloads on this; it deliberately does NOT feed the outbox (no re-push loop).</summary>
+    public event Action? Changed;
+
     public IReadOnlyList<RunRecord> Runs
     {
         get { lock (_gate) return _runs.ToList(); }
@@ -101,6 +105,32 @@ public sealed class RunStore
             if (removed) SaveLocked();
         }
         if (removed) RunRemoved?.Invoke(id);
+    }
+
+    /// <summary>
+    /// Merge the server's runs into the local cache (the pull half of two-way sync). The server is the source
+    /// of truth for HISTORY; local is a cache + an outbox. Per run:
+    ///  - local not-yet-pushed (Synced=false) → KEEP (it's in the outbox; it wins until it pushes).
+    ///  - local synced &amp; on server → ADOPT the server's version (that's a web edit), preserving the
+    ///    local-only CharacterId and the immutable EnteredUtc anchor.
+    ///  - local synced &amp; ABSENT from server → a web delete → DROP it.
+    ///  - server-only → ADD it (restores history on a fresh install / another PC).
+    /// Safety: <paramref name="server"/> must be a REAL 200 result (the client returns null otherwise and the
+    /// caller skips reconcile), and an EMPTY server list never deletes anything — that guards a bad key / first
+    /// sync (lots of unsynced local, nothing server-side yet) from wiping local history. Returns true if
+    /// anything changed and fires <see cref="Changed"/> (outside the lock); never fires RunSaved/RunRemoved.
+    /// </summary>
+    public bool ReconcileFromServer(IReadOnlyList<RunRecord> server)
+    {
+        bool changed;
+        lock (_gate)
+        {
+            RunReconciler.Result result = RunReconciler.Merge(_runs, server);
+            changed = result.Changed;
+            if (changed) { _runs.Clear(); _runs.AddRange(result.Runs); SaveLocked(); }
+        }
+        if (changed) Changed?.Invoke();
+        return changed;
     }
 
     /// <summary>Record that a run was successfully pushed. Does NOT fire RunSaved (no re-push loop).</summary>

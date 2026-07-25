@@ -66,6 +66,9 @@ public partial class RunTrackerView : UserControl
         _pipeline.EntryHeld += OnEntryHeld;
         _pipeline.LeftPromptChanged += OnLeftPrompt;
 
+        // A pull brought web edits/deletes down — rebuild the history grid (fires only when something changed).
+        _store.Changed += () => Dispatcher.BeginInvoke(() => LoadRuns());
+
         // Live "elapsed" readout for the active run. The view lives for the app's lifetime, so the
         // subscriptions + timer are never torn down (process exit handles that).
         _elapsedTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -80,9 +83,12 @@ public partial class RunTrackerView : UserControl
 
     private void LoadRuns()
     {
+        string? selectedId = (Grid.SelectedItem as RunRow)?.Record.Id;
         _rows.Clear();
         foreach (RunRecord r in _store.AllNewestFirst())
             _rows.Add(new RunRow(r, Persist));
+        if (selectedId is not null)
+            Grid.SelectedItem = _rows.FirstOrDefault(r => r.Record.Id == selectedId);
     }
 
     private void OnRunFinalized(RunRecord run) => Dispatcher.BeginInvoke(() =>

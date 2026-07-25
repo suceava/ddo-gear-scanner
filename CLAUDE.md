@@ -159,22 +159,27 @@ persists FINALIZED runs; the single **in-progress** run is separately persisted 
 (card + timer + paused state resume from the real EnteredUtc; older is dropped so no phantom run comes
 back). Tracking is always on (no toggle — a user would never want it off). Wiki links via `QuestWiki.Slug`.
 
-## Cloud sync (runs → DDO Gear Planner account)
+## Cloud sync (runs ⇄ DDO Gear Planner account) — TWO-WAY
 
-The run tracker pushes finalized runs to the sibling **DDO Gear Planner** web backend (separate repo; API
-at `ddo-api.gnarlybits.com`, wire contract in that repo's `backend/CONTRACT.md`). Local `runs.json` stays
-authoritative — this is a best-effort **outbox** layered on top:
+The run tracker syncs runs with the sibling **DDO Gear Planner** web backend (separate repo; API at
+`ddo-api.gnarlybits.com`, wire contract in that repo's `backend/CONTRACT.md`). Once a key is set, the
+**server is the source of truth for history** and local `runs.json` is a **cache + outbox** (so the app loads
+fast and survives a backend outage). With no key it's purely local. Both directions ride on `RunSyncService`:
 - **Auth** = a per-user API key minted at `ddo.gnarlybits.com` → Account, pasted into **Settings → DDO Gear
   Planner account** (`AppSettings.SyncApiKey`; `SyncApiBase` overrides the URL). "Test connection" hits `GET /me`.
-- **`RunStore` is the outbox**: thread-safe (locked — the pipeline adds from the capture thread, the UI edits
-  from the dispatcher, the sync worker marks from a background task), raises `RunSaved`/`RunRemoved`, and each
-  run carries a `Synced` flag. `MarkSynced` records a push WITHOUT firing `RunSaved` (no re-push loop); editing
-  a run resets Synced=false → re-push.
-- **`RunSyncService`** drains on save (debounced batch `POST /runs`), on startup, and every 2 min (picks up
-  anything left unsynced while offline/key-less); deletes propagate via `DELETE /runs/{id}` (best-effort — a
-  failed delete can orphan a server row). Never blocks the capture thread. `RunSyncClient` maps `RunRecord` →
-  the wire shape (drops CharacterId + transient Paused/PausedUtc; character name = OCR'd name, else the active
-  profile, else "Unknown"). `[sync]` log lines trace pushes/deletes.
+- **PUSH (outbox):** `RunStore` is thread-safe (locked), raises `RunSaved`/`RunRemoved`, and each run carries a
+  `Synced` flag. `MarkSynced` records a push WITHOUT firing `RunSaved` (no re-push loop); editing a run resets
+  Synced=false → re-push. `RunSyncService` drains on save (debounced batch `POST /runs`), on startup, and every
+  2 min; deletes propagate via `DELETE /runs/{id}`.
+- **PULL (reconcile):** right after each drain, `RunSyncClient.PullAsync` does `GET /runs` and
+  `RunStore.ReconcileFromServer` merges via the pure `RunReconciler.Merge` (in the Model project, unit-tested):
+  keep unsynced-local (outbox), adopt the server's version of synced runs (web edits — preserving local-only
+  `CharacterId` + the immutable `EnteredUtc`), drop synced runs absent from the server (web deletes), add
+  server-only runs (fresh-install restore). **Delete-safety:** a null pull (network error / non-200) is skipped
+  entirely, and an **empty** server list never deletes anything (guards a bad key / first sync from wiping local
+  history). Reconcile fires `Changed` (NOT `RunSaved`) → `RunTrackerView` reloads so web edits/deletes appear.
+- `RunSyncClient` maps `RunRecord` ⇄ the wire shape (drops CharacterId + transient Paused/PausedUtc; character
+  name = OCR'd name, else the active profile, else "Unknown"). `[sync]` log lines trace pushes/pulls/deletes.
 - **Status** shows live in the Run tracker control bar — ☁ Sync off / Syncing N… / Synced / Sync error
   (`RunSyncService.StatusChanged` → `RunTrackerView.SetSyncStatus`). That's the user-facing "did it work".
 

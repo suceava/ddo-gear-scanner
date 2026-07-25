@@ -8,12 +8,13 @@ public enum SyncState { Off, Syncing, Synced, Error }
 public sealed record SyncStatus(SyncState State, int Pending = 0, string? Detail = null);
 
 /// <summary>
-/// The cloud-sync outbox for dungeon runs. Local capture is unchanged and always authoritative; this rides
-/// on top: when a run is saved (added/edited) it triggers a debounced drain that batch-pushes every
-/// still-unsynced run and marks them synced; deletes propagate immediately (best-effort). A periodic timer
-/// and an explicit <see cref="Start"/> (on app launch / after the key changes) re-drain, so anything that
-/// failed while offline or key-less gets picked up. Nothing here blocks the capture thread — pushes run on
-/// background tasks and only touch the (locked) store to mark results.
+/// Two-way cloud sync for dungeon runs. The PUSH half is an outbox: when a run is saved (added/edited) a
+/// debounced drain batch-pushes every still-unsynced run and marks them synced; deletes propagate immediately.
+/// The PULL half runs right after each drain — GET /runs and reconcile, so web edits/deletes on the account
+/// flow back down (local runs.json becomes a cache; the server is the source of truth for history). A periodic
+/// timer and an explicit <see cref="Start"/> (on app launch / after the key changes) re-run both halves, so
+/// anything that failed offline gets picked up. Nothing here blocks the capture thread — everything runs on
+/// background tasks and only touches the (locked) store to record results.
 /// </summary>
 public sealed class RunSyncService : IDisposable
 {
@@ -94,9 +95,19 @@ public sealed class RunSyncService : IDisposable
                 }
             } while (_drainRequested);
 
+            // Pull half: bring down web edits/deletes. Runs even when there was nothing to push (pending==0).
+            await PullAndReconcileAsync().ConfigureAwait(false);
             Report(new SyncStatus(SyncState.Synced));
         }
         finally { _drainGate.Release(); }
+    }
+
+    /// <summary>GET /runs and merge into the local cache. A null result (network error / non-200) is skipped —
+    /// the store's reconcile never treats "no answer" as "the account is empty".</summary>
+    private async Task PullAndReconcileAsync()
+    {
+        IReadOnlyList<RunRecord>? server = await _client.PullAsync().ConfigureAwait(false);
+        if (server is not null) _store.ReconcileFromServer(server);
     }
 
     public void Dispose()

@@ -100,6 +100,75 @@ public sealed class RunSyncClient
         catch (Exception ex) { Log($"delete failed: {ex.Message}"); return false; }
     }
 
+    /// <summary>
+    /// Pull the account's runs (GET /runs). Returns the server's runs on a clean 200, or null on any failure
+    /// / non-200 — the caller MUST treat null as "don't reconcile" (never as "the account is empty"), so a
+    /// network blip or a bad key can't wipe local history. Server-owned fields only; CharacterId (local) and
+    /// the transient Paused fields are not carried, and every pulled run is marked Synced (it's on the server).
+    /// </summary>
+    public async Task<IReadOnlyList<RunRecord>?> PullAsync(CancellationToken ct = default)
+    {
+        SyncConfig? cfg = _config();
+        if (cfg is null || cfg.ApiKey.Length == 0) return null;
+        try
+        {
+            using HttpRequestMessage req = Authed(HttpMethod.Get, cfg, "/runs");
+            using HttpResponseMessage resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+            {
+                Log($"pull HTTP {(int)resp.StatusCode}");
+                return null;
+            }
+            string text = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using JsonDocument doc = JsonDocument.Parse(text);
+            if (!doc.RootElement.TryGetProperty("runs", out JsonElement runs) || runs.ValueKind != JsonValueKind.Array)
+                return null;
+
+            var list = new List<RunRecord>(runs.GetArrayLength());
+            foreach (JsonElement e in runs.EnumerateArray())
+                if (FromWire(e) is { } run) list.Add(run);
+            Log($"pulled {list.Count} run(s)");
+            return list;
+        }
+        catch (Exception ex) { Log($"pull failed: {ex.GetType().Name}: {ex.Message}"); return null; }
+    }
+
+    /// <summary>One GET /runs element → RunRecord, or null if it's missing the required fields. Inverse of
+    /// <see cref="ToWire"/>; CharacterId is left null (local-only) and Synced is true (it came from the server).</summary>
+    private static RunRecord? FromWire(JsonElement e)
+    {
+        string? id = Str(e, "runId");
+        if (id is null || Date(e, "enteredUtc") is not { } entered) return null;
+        return new RunRecord(
+            Id: id,
+            DungeonName: Str(e, "dungeonName") ?? string.Empty,
+            Difficulty: Str(e, "difficulty"),
+            CharacterLevel: Int(e, "characterLevel"),
+            CharacterId: null,
+            EnteredUtc: entered,
+            CompletedUtc: Date(e, "completedUtc"),
+            Xp: Int(e, "xp"),
+            Completed: Bool(e, "completed") ?? false,
+            RawOcrText: Str(e, "rawOcrText") ?? string.Empty,
+            Edited: Bool(e, "edited") ?? false,
+            QuestLevel: Int(e, "questLevel"),
+            CharacterName: Str(e, "characterName"),
+            QuestDuration: Str(e, "questDuration"),
+            Paused: false,
+            PausedUtc: null,
+            Synced: true);
+    }
+
+    private static string? Str(JsonElement e, string name)
+        => e.TryGetProperty(name, out JsonElement v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+    private static int? Int(JsonElement e, string name)
+        => e.TryGetProperty(name, out JsonElement v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n) ? n : null;
+    private static bool? Bool(JsonElement e, string name)
+        => e.TryGetProperty(name, out JsonElement v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False ? v.GetBoolean() : null;
+    private static DateTime? Date(JsonElement e, string name)
+        => Str(e, name) is { } s && DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out DateTime d) ? d : null;
+
     /// <summary>Validate the key via GET /me — returns (ok, detail) for the Settings "Test" button.</summary>
     public async Task<(bool Ok, string Detail)> ValidateAsync(CancellationToken ct = default)
     {
