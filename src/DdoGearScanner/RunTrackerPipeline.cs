@@ -32,9 +32,6 @@ public sealed class RunTrackerPipeline
     private const long IntervalMs = 300;
     // A candidate quest name must be read this many consecutive ticks before we act (glitch guard).
     private const int StartDebounce = 2;
-    // A blank tracker (loading screen) must persist this many consecutive ticks after the popup closes to
-    // count as "entered" — long enough that a one-frame OCR blank can't fake it, short vs a real load.
-    private const int LoadDebounce = 3;
     // A blank tracker is tolerated this long (dungeon loads / porting) before treating it as stale
     // (logout/crash cleanup) — a backstop; the primary "left" signal is the quest-name match below.
     private const long StaleEmptyMs = 5 * 60 * 1000;
@@ -52,6 +49,10 @@ public sealed class RunTrackerPipeline
     // more often.
     private const int IdleCompletionEvery = 2;
     private const long DumpIntervalMs = 5000;
+    // If a run is active but no capture frame has arrived for this long, the game was closed or minimized
+    // (Windows.Graphics.Capture then delivers nothing, so Apply never runs) — auto-PAUSE the run so its timer
+    // stops instead of counting forever. Long enough to ride out a brief alt-tab, short enough it's not "ages".
+    private const long FrameStarveMs = 45_000;
 
     // DDO public hubs (and a few common non-quest zones). Stored as alphanumeric-only keys because the
     // quest-tracker TITLE is in an ornate font whose word gaps OCR inconsistently as space / underscore /
@@ -84,6 +85,8 @@ public sealed class RunTrackerPipeline
     private volatile bool _enabled = true;
     private int _busy;                 // 0/1 guard: at most one OCR read in flight
     private long _lastTick;
+    private long _lastFrameTick = Environment.TickCount64;   // when a real capture frame last arrived (game-alive heartbeat)
+    private readonly System.Timers.Timer _watchdog;          // fires the frame-starvation auto-pause
     private long _lastDumpTick;
     private int _idleTick;
     private int _avatarTick;
@@ -108,8 +111,7 @@ public sealed class RunTrackerPipeline
     private string? _detectedName;     // latest character name OCR'd from the avatar region
     private int? _detectedLevel;       // latest character level OCR'd from the avatar region
     private string? _detectedLevelKey; // the character key _detectedLevel belongs to (for the ding-up guard)
-    private int _pendingCount;         // consecutive "entered a non-hub area" ticks while armed by a popup
-    private int _loadingTicks;         // consecutive blank-tracker ticks after the popup closed (loading in)
+    private int _pendingCount;         // consecutive "tracker shows this quest" ticks while armed by a popup
     private string? _lastFinalizedName;
     private bool _sawEmptySinceFinalize = true;
     private string? _lastLoggedName;   // debug: only log a tracker read when it changes
@@ -169,6 +171,11 @@ public sealed class RunTrackerPipeline
         // every meaningful change to _current (start/pause/resume/edit/finalize); the store saves an
         // in-progress run and clears the file once it's completed or null.
         CurrentChanged += ActiveRunStore.Save;
+
+        // Watchdog: auto-pause an active run when the capture stream goes silent (game closed/minimized).
+        _watchdog = new System.Timers.Timer(10_000) { AutoReset = true };
+        _watchdog.Elapsed += (_, _) => CheckFrameStarvation();
+        _watchdog.Start();
     }
 
     private readonly OpenRouterRunReader? _llm;
@@ -376,6 +383,7 @@ public sealed class RunTrackerPipeline
     public void OnFrame(OpenCvMat frame)
     {
         if (!_enabled || frame.Empty()) return;
+        _lastFrameTick = Environment.TickCount64;   // heartbeat: a real frame arrived → the game is alive
 
         long now = Environment.TickCount64;
         if (now - _lastTick < IntervalMs) return;
@@ -672,31 +680,20 @@ public sealed class RunTrackerPipeline
                 if (_pendingEntry is { } pe && nowTick - _pendingEntryTick < PendingEntryTtlMs)
                 {
                     bool lingering = _lastFinalizedName is not null && NameEq(_lastFinalizedName, pe.Name) && !_sawEmptySinceFinalize;
-                    bool popupStillUp = nowTick - _pendingEntryTick < PopupGoneMs;   // still at the entrance
-                    bool areaChanged = AreaChanged(_armedArea, Key(name));
+                    bool popupStillUp = nowTick - _pendingEntryTick < PopupGoneMs;   // still choosing at the entrance
 
-                    // Enter vs Cancel. Clicking Enter LOADS you into the instance: the tracker goes BLANK
-                    // during the loading screen, then the area changes. Cancel leaves you standing in the
-                    // same visible area (tracker stays non-blank). So an entry shows up as EITHER the area
-                    // changing OR the tracker going blank (loading) after the popup closed. The blank-load
-                    // path is what rescues quests entered from a wilderness (long load) or whose new area
-                    // has no readable title (camp/social hubs) — the old code only watched for area change
-                    // and dropped the pending entry when the load outlasted its TTL.
-                    if (!popupStillUp && name is null) _loadingTicks++;
-                    else if (name is not null) _loadingTicks = 0;
-
-                    bool enteredByArea = name is not null && !isHub && !popupStillUp && areaChanged;
-                    // The blank-tracker "loading" path only counts if you were standing somewhere with a
-                    // READABLE tracker (armed area non-blank) that then went blank — a real load-out. If the
-                    // tracker was blank the whole time (a hub / quest-giver spot with no active quest),
-                    // a blank tracker means nothing, and opening+cancelling a popup there must NOT start a run.
-                    bool enteredByLoad = _loadingTicks >= LoadDebounce && !string.IsNullOrEmpty(_armedArea);
-
-                    if ((enteredByArea || enteredByLoad) && !lingering)
+                    // POSITIVE entry signal: a run starts only once the quest TRACKER shows THIS quest's own
+                    // name — its title/objectives appear in-instance, so you are unambiguously inside. Clicking
+                    // Cancel / closing the popup never produces this (the tracker keeps showing the area you're
+                    // standing in), so merely VIEWING a popup no longer starts a run. This replaces the old
+                    // "area changed / tracker blanked = you loaded in" proxies, which a Cancel could mimic. The
+                    // popup lives in the completion region (not the tracker), so it can't match itself.
+                    // Debounced so a one-frame fuzzy fluke can't spawn a run. (Trade-off: an instance that never
+                    // shows a readable title — a rare camp/social spot — needs a manual Start.)
+                    bool insideQuest = !lingering && TrackerShowsQuest(tracker, pe.Name);
+                    if (insideQuest)
                     {
-                        // Area-change debounces over a couple ticks (flicker guard); a sustained loading
-                        // screen is already its own debounce, so it starts as soon as it's confirmed.
-                        if (enteredByLoad || ++_pendingCount >= StartDebounce)
+                        if (++_pendingCount >= StartDebounce)
                         {
                             _current = NewRun(pe.Name) with { QuestLevel = pe.QuestLevel, Difficulty = pe.Difficulty, QuestDuration = pe.Duration };
                             _pendingEntry = null;   // consumed by this run
@@ -705,8 +702,7 @@ public sealed class RunTrackerPipeline
                             _completionBaselined = false;             // re-baseline the completion rising-edge
                             _runXp = null;                            // fresh XP for this run
                             _pendingCount = 0;
-                            _loadingTicks = 0;
-                            Log($"started \"{pe.Name}\"{(enteredByLoad ? " (loading)" : "")}");
+                            Log($"started \"{pe.Name}\"");
                             currentChanged = true;
                             currentSnapshot = _current;
                         }
@@ -714,13 +710,14 @@ public sealed class RunTrackerPipeline
                     else
                     {
                         _pendingCount = 0;
-                        // Cancelled / stayed put: the popup is gone but you're still in the SAME non-blank
-                        // area (a real entry would have blanked the tracker as it loaded). Clear the entry.
-                        if (!popupStillUp && name is not null && !isHub && !areaChanged)
+                        // Cancelled / stayed put: the popup's gone (past the choosing window) and you're back in
+                        // a readable NON-hub area that isn't this quest — no title ever appeared, so clear the
+                        // entry before it can linger and false-match. A hub or a blank (loading) tracker just
+                        // waits out the TTL — a real entry's title will show up within it.
+                        if (!popupStillUp && name is not null && !isHub && !TrackerShowsQuest(tracker, pe.Name))
                         {
                             _pendingEntry = null;
                             _armedArea = null;
-                            _loadingTicks = 0;
                         }
                         if (isHub || name is null) _sawEmptySinceFinalize = true;
                     }
@@ -729,7 +726,6 @@ public sealed class RunTrackerPipeline
                 {
                     // No popup held → nothing here is a run. Just track the "empty since finalize" flag.
                     _pendingCount = 0;
-                    _loadingTicks = 0;
                     if (isHub || name is null) _sawEmptySinceFinalize = true;
                 }
             }
@@ -879,7 +875,33 @@ public sealed class RunTrackerPipeline
         return run;
     }
 
-    private void ResetPending() { _pendingCount = 0; _loadingTicks = 0; }
+    private void ResetPending() { _pendingCount = 0; }
+
+    /// <summary>Watchdog tick: if a run is live but the capture stream has gone silent for
+    /// <see cref="FrameStarveMs"/> (the game was closed or minimized — Windows.Graphics.Capture then delivers
+    /// nothing, so Apply never runs and the timer would count forever), auto-PAUSE it. Same freeze as a manual
+    /// pause: the timer stops and completion/left detection is suspended. The user resumes / cancels / completes
+    /// when they're back (and a restored active run comes back paused too). Runs on the timer thread.</summary>
+    private void CheckFrameStarvation()
+    {
+        RunRecord? paused = null;
+        lock (_lock)
+        {
+            if (_current is { Completed: false, Paused: false } cur
+                && Environment.TickCount64 - _lastFrameTick > FrameStarveMs)
+            {
+                _current = cur with { Paused = true, PausedUtc = DateTime.UtcNow };
+                _leftPromptActive = false; _leftDismissed = false;
+                paused = _current;
+            }
+        }
+        if (paused is not null)
+        {
+            Log($"auto-paused \"{paused.DungeonName}\" (no capture frames for {FrameStarveMs / 1000}s — game closed/minimized)");
+            LeftPromptChanged?.Invoke(false);
+            CurrentChanged?.Invoke(paused);
+        }
+    }
 
     private RunRecord NewRun(string name)
     {

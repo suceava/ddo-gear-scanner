@@ -115,15 +115,23 @@ all pure parsing is in `Vision/RunTextParser.cs` (unit-tested in `RunTrackerTest
 - **Character** = the **avatar region** (`CharacterReader`): name reads on the plain OCR; the level pip
   ("20") sits over the portrait so a second **bright-text threshold pass** recovers it.
 
-**Start / cancel logic** (`RunTrackerPipeline`): popup seen → arm (record the area you stood in). A run
-STARTS on either (a) the area **changing** from the armed area, or (b) a **loading screen** — the tracker
-was showing a readable area and then went **blank** (the load-out tell). The blank-load path requires the
-armed area to have been non-blank, so opening+**cancelling** a popup where the tracker is blank (a
-quest-giver spot) does NOT start a run. **Wilderness** areas show a "Slayer: <area> Menaces" counter — if
-an active run's tracker reads that (checked across **all** tracker lines, not just the cleaned header —
-the counter often isn't the line the name-cleaner picks), the run is **discarded** (never logged; DDO's
-entry popup for a wilderness looks like a quest). Character name+level are OCR'd while idle, cached, and
-stamped onto the run at start.
+**Start / cancel logic** (`RunTrackerPipeline`): popup seen → arm it (held as `_pendingEntry`, TTL 45s). A
+run STARTS only on a **positive** signal — the quest **tracker shows THIS quest's own name**
+(`TrackerShowsQuest(pendingEntry.Name)`, 2-tick debounced): its title/objectives appear in-instance, so
+you're unambiguously inside. Clicking **Cancel** / closing the popup keeps the tracker on the area you're
+standing in and never shows the quest title, so merely VIEWING a popup can't start a run. (This replaced
+the old area-changed / tracker-blanked "you probably loaded in" proxies, which a Cancel could mimic — the
+recurring false-start bug.) Trade-off: a rare instance that never shows a readable title (a camp/social
+spot) needs a manual **Start**; wilderness/normal quests all show their title. **Wilderness** areas show a
+"Slayer: <area> Menaces" counter, not a quest title, so they no longer auto-start (the counter never
+matches the quest name); the across-all-lines Slayer check still **discards** one if it slips through.
+Character name+level are OCR'd while idle, cached, and stamped onto the run at start.
+
+**Game closed/minimized → auto-pause** (frame-starvation watchdog): the capture frame stream is the
+game-alive heartbeat. A timer (every 10s) auto-**pauses** a live, un-paused run when no frame has arrived
+for `FrameStarveMs`=45s (Windows.Graphics.Capture delivers nothing for a gone/minimized window, so `Apply`
+never runs and the timer would otherwise count forever). Same freeze as a manual pause; restore-on-startup
+brings it back paused so you Resume / Complete / Cancel.
 
 **"Left the dungeon" = the tracker no longer shows THIS run's quest** (`TrackerShowsQuest`: fuzzy match
 of the run's clean popup-sourced name against every tracker line, ≤40% edit distance, debounced
