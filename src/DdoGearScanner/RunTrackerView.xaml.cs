@@ -361,7 +361,11 @@ public sealed class RunRow : INotifyPropertyChanged
         }
     }
 
-    // The table "Lvl" column is the QUEST level (matches the editor's "Quest lvl" field). It no longer
+    // Character level at run time — its own "Char Lvl" column, distinct from the quest level (read-only;
+    // edit via the run editor). Kept separate + clearly labelled so it can't be confused with Quest Lvl.
+    public string CharLevelText => Record.CharacterLevel?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+
+    // The table "Quest Lvl" column is the QUEST level (matches the editor's "Quest lvl" field). It no longer
     // falls back to CharacterLevel — that silently showed the char level and disagreed with the editor.
     public string LevelText
     {
@@ -400,7 +404,7 @@ public sealed class RunRow : INotifyPropertyChanged
     {
         Record = r;
         foreach (string p in new[] { nameof(Dungeon), nameof(Character), nameof(Difficulty), nameof(XpText),
-            nameof(LevelText), nameof(Entered), nameof(Duration), nameof(XpPerMinute), nameof(Completed), nameof(Status) })
+            nameof(CharLevelText), nameof(LevelText), nameof(Entered), nameof(Duration), nameof(XpPerMinute), nameof(Completed), nameof(Status) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
     }
 

@@ -143,6 +143,7 @@
                         </Style>
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
+                <DataGridTextColumn Header="Char Lvl" Binding="{Binding CharLevelText}" Width="62" />
                 <DataGridTextColumn Header="Difficulty" Binding="{Binding Difficulty}" Width="82" />
                 <DataGridTextColumn Header="Lvl" Binding="{Binding LevelText}" Width="46" />
                 <DataGridTextColumn Header="XP" Binding="{Binding XpText}" Width="72" />
