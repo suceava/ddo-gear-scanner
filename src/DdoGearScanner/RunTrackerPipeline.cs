@@ -42,6 +42,11 @@ public sealed class RunTrackerPipeline
     // A run must last at least this long before a chat "Adventure Completed" can finish it — guards against
     // a stale completion message still scrolled in the chat instantly finishing a just-started run.
     private const double MinRunSeconds = 12;
+    // A completion / XP line must be CONTINUOUSLY absent this long before a later reappearance counts as a
+    // NEW award. That's what stops the PREVIOUS quest's lingering "Adventure Completed" / "receive N XP"
+    // lines — which OCR flickers in and out — from faking a rising edge and finalizing a freshly-started run
+    // with stale XP. A real line only clears this way once it genuinely scrolls off (seconds of absence).
+    private const long StaleClearMs = 10000;
     // Backstop: clear a completed run's card after this long even if we never detect the zone change.
     private const double CompletedCardSeconds = 25;
     // When idle, still OCR the reward/entry region every Nth tick so we catch the entry popup and a
@@ -106,7 +111,9 @@ public sealed class RunTrackerPipeline
     private IReadOnlyList<string> _lastChatLines = Array.Empty<string>();  // previous chat lines (debug view only)
     private bool _completionPresent;    // was "Adventure Completed" present in the last chat read (rising-edge detect)
     private bool _completionBaselined;  // has this run taken its first chat read (baseline) yet
+    private long _completionAbsentSince; // tick "Adventure Completed" first went absent (0 = present) — flicker debounce
     private bool _xpPresent;            // was a "receive N XP" line present last read (rising-edge, same guard as completion)
+    private long _xpAbsentSince;        // tick the XP line first went absent (0 = present) — flicker debounce
     private int? _runXp;                // latest "receive N XP" seen in chat this run (XP is chat-only)
     private string? _detectedName;     // latest character name OCR'd from the avatar region
     private int? _detectedLevel;       // latest character level OCR'd from the avatar region
@@ -448,29 +455,46 @@ public sealed class RunTrackerPipeline
                     IReadOnlyList<string> chatLines = _chat.ReadLines(chatCrop);
                     chatRaw = string.Join("\n", chatLines);
 
-                    // Completion = RISING EDGE on "Adventure Completed" being present in the chat. This is
-                    // robust to a fast, noisy combat/effects chat where line-shift alignment fails (the
-                    // message just has to APPEAR, however fast the log scrolls). Baselined on the run's
-                    // first chat read so a stale completion still scrolled in from the prior quest can't
-                    // fire it; MinRunSeconds is a second guard.
+                    // Completion = a "Adventure Completed" line that arrives after being GENUINELY absent —
+                    // and XP likewise ("You receive N XP", chat-only). The trap: the PREVIOUS quest's
+                    // completion/XP lines linger in the log and OCR flickers them in/out; a naive
+                    // present-vs-last-read rising edge reads that flicker as a brand-new award and finalizes
+                    // a freshly-started run with the prior quest's XP. So "present" only flips back to false
+                    // after the line has been CONTINUOUSLY absent for StaleClearMs (a real scroll-off), not
+                    // on a one-frame OCR miss. First read baselines to whatever's already there (no fire).
+                    long nowMs = Environment.TickCount64;
                     bool completionNow = chatLines.Any(RunTextParser.IsAdventureCompleted);
                     int? xpNow = RunTextParser.ExtractChatXp(chatLines);
                     bool xpNowPresent = xpNow is not null;
 
-                    // First chat read of the run only BASELINES — a completion OR a receive-XP line that's
-                    // already sitting in the log (lingering from the PREVIOUS quest) must not fire. After
-                    // that, both fire on a rising edge (absent → present).
-                    if (!_completionBaselined) _completionBaselined = true;                 // first read: baseline only
+                    if (!_completionBaselined)
+                    {
+                        _completionBaselined = true;                       // first read: baseline only, never fire
+                        _completionPresent = completionNow;
+                        _xpPresent = xpNowPresent;
+                        _completionAbsentSince = completionNow ? 0 : nowMs;
+                        _xpAbsentSince = xpNowPresent ? 0 : nowMs;
+                    }
                     else
                     {
-                        if (completionNow && !_completionPresent) freshChat = true;          // new "Adventure Completed"
-                        // XP only appears in chat ("You receive N XP") — even when the TRACKER's "Completed"
-                        // finalizes the run. Capture on the rising edge so a stale prior-quest XP line that's
-                        // still visible when this run starts can't be picked up as this run's XP.
-                        if (xpNowPresent && !_xpPresent) chatXp = xpNow;                     // new XP award
+                        if (completionNow)
+                        {
+                            if (!_completionPresent) freshChat = true;     // truly-absent → present = new completion
+                            _completionPresent = true;
+                            _completionAbsentSince = 0;
+                        }
+                        else if (_completionAbsentSince == 0) _completionAbsentSince = nowMs;
+                        else if (nowMs - _completionAbsentSince >= StaleClearMs) _completionPresent = false;
+
+                        if (xpNowPresent)
+                        {
+                            if (!_xpPresent) chatXp = xpNow;               // truly-absent → present = new XP award
+                            _xpPresent = true;
+                            _xpAbsentSince = 0;
+                        }
+                        else if (_xpAbsentSince == 0) _xpAbsentSince = nowMs;
+                        else if (nowMs - _xpAbsentSince >= StaleClearMs) _xpPresent = false;
                     }
-                    _completionPresent = completionNow;
-                    _xpPresent = xpNowPresent;
 
                     // Kept only to feed the debug chat view.
                     IReadOnlyList<string> newLines = NewChatLines(chatLines, _lastChatLines);

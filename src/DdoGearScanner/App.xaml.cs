@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Windows;
 using DdoGearScanner.Capture;
 using DdoGearScanner.Vision;
@@ -6,6 +7,10 @@ namespace DdoGearScanner;
 
 public partial class App : Application
 {
+    // Single-instance guard: a second copy would fight over the same capture stream, the shared log file,
+    // active-run.json, and the sync outbox — producing phantom/double-logged runs. Held for the process
+    // lifetime; auto-released on exit (an abandoned one from a crash is reclaimed by the next launch).
+    private Mutex? _singleInstance;
     // Default capture hotkey (self-heal target): Insert. A normal key that fires WM_HOTKEY reliably
     // (unlike lock keys ScrollLock/Pause), DDO-free.
     private const uint DefaultHotkeyMod = 0;
@@ -21,6 +26,16 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Refuse to launch a second instance (see the field note). Per user session (Local\).
+        _singleInstance = new Mutex(initiallyOwned: true, @"Local\DdoCompanion.SingleInstance", out bool isNew);
+        if (!isNew)
+        {
+            MessageBox.Show("DDO Companion is already running.", "DDO Companion",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            Shutdown();
+            return;
+        }
 
         AppSettings settings = AppSettings.Instance;
         CharacterStore charStore = CharacterStore.Load();
