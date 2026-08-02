@@ -51,6 +51,28 @@ public class NamedItemMatcherTests
     }
 
     [Fact]
+    public void LevelSuffixItemMatchesOnBaseName()
+    {
+        // The game shows "Whisperchain"; the catalog names it "Whisperchain (Level 18)". The level
+        // suffix must not sink the match (it used to drag similarity to ~0.57, well under the bar).
+        ItemMatch? m = NamedItemMatcher.TryMatch("Whisperchain", EquipSlot.Armor, 18);
+        Assert.NotNull(m);
+        Assert.True(m!.HighConfidence);
+        Assert.Equal("Whisperchain (Level 18)", m.Item.Name);   // ML picks the right variant
+        Assert.Equal(18, m.Item.MinLevel);
+    }
+
+    [Fact]
+    public void LevelSuffixMinLevelSelectsTheVariant()
+    {
+        // Same base name, different captured ML → the matching-ML variant is chosen, not a sibling.
+        ItemMatch? m = NamedItemMatcher.TryMatch("Whisperchain", EquipSlot.Armor, 24);
+        Assert.NotNull(m);
+        Assert.True(m!.HighConfidence);
+        Assert.Equal(24, m.Item.MinLevel);
+    }
+
+    [Fact]
     public void ApplyReplacesModsAndKeepsRawOcr()
     {
         GearItem ocr = GearItem.Empty("RAW OCR TEXT") with

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using DdoGearScanner.Model;
 
 namespace DdoGearScanner.Vision;
@@ -32,22 +33,38 @@ public static class NamedItemMatcher
         IReadOnlyList<CatalogItem> candidates = slot != EquipSlot.Unknown ? ItemCatalog.ForSlot(slot) : ItemCatalog.All;
         if (candidates.Count == 0) return null;
 
-        CatalogItem? best = null, second = null;
-        double bestScore = 0, secondScore = 0;
+        CatalogItem? best = null;
+        double bestScore = 0;
+        string bestBase = "";
+        // Runner-up for the confidence margin: the best DIFFERENTLY-named candidate. Level variants of
+        // one item ("Whisperchain (Level 16/17/18…)") share a base name and are disambiguated by ML —
+        // they're the same item, not competing alternatives, so a sibling must never sink confidence.
+        double runnerUpScore = 0;
         foreach (CatalogItem c in candidates)
         {
-            double score = Similarity(target, Normalize(c.Name));
-            // Min level agreeing nudges a near-tie toward the right item; never a hard filter (ML is
-            // often misread, and many items share a name across heroic/legendary at different MLs).
-            if (minLevel is int ml && c.MinLevel > 0 && ml == c.MinLevel) score += 0.03;
+            string cBase = Normalize(StripLevel(c.Name));
+            double score = Similarity(target, cBase);
+            // Min level agreeing nudges toward the right variant — decisive among same-name variants,
+            // a gentle closeness tiebreaker otherwise; never a hard filter (ML is often misread, and many
+            // items share a name across heroic/legendary at different MLs).
+            if (minLevel is int ml && c.MinLevel > 0)
+                score += ml == c.MinLevel ? 0.03 : 0.015 / (1 + Math.Abs(ml - c.MinLevel));
 
-            if (score > bestScore) { second = best; secondScore = bestScore; best = c; bestScore = score; }
-            else if (score > secondScore) { second = c; secondScore = score; }
+            if (score > bestScore)
+            {
+                // the outgoing best becomes a margin runner-up only if it names a DIFFERENT item
+                if (best is not null && bestBase != cBase && bestScore > runnerUpScore) runnerUpScore = bestScore;
+                best = c; bestScore = score; bestBase = cBase;
+            }
+            else if (cBase != bestBase && score > runnerUpScore)
+            {
+                runnerUpScore = score;
+            }
         }
         if (best is null) return null;
 
         double threshold = slot != EquipSlot.Unknown ? HighThreshold : UnknownSlotThreshold;
-        bool high = bestScore >= threshold && (second is null || bestScore - secondScore >= Margin);
+        bool high = bestScore >= threshold && bestScore - runnerUpScore >= Margin;
         return new ItemMatch(best, Math.Min(bestScore, 1.0), high);
     }
 
@@ -67,6 +84,14 @@ public static class NamedItemMatcher
 
     private static AugmentColor ParseColor(string token)
         => Enum.TryParse(token, ignoreCase: true, out AugmentColor color) ? color : AugmentColor.Unknown;
+
+    private static readonly Regex LevelSuffix =
+        new(@"\s*\(Level \d+\)\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>Drop a trailing "(Level N)". DDOBuilder names each ML variant of a scaling item
+    /// "Whisperchain (Level 18)", but the game (and OCR) shows just "Whisperchain" — so compare on the
+    /// base name and let min level pick the variant.</summary>
+    internal static string StripLevel(string s) => LevelSuffix.Replace(s, "");
 
     /// <summary>Lowercase, strip non-alphanumerics to spaces, collapse runs. Makes OCR punctuation
     /// noise ("Admiral's"/"Admirals", stray dots) irrelevant to the comparison.</summary>
