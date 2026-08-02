@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DdoGearScanner.Model;
+using DdoGearScanner.Vision;
 
 namespace DdoGearScanner;
 
@@ -40,8 +41,38 @@ public sealed class CaptureStore
                 var loaded = JsonSerializer.Deserialize<Dictionary<EquipSlot, GearItem>>(File.ReadAllText(StorePath), JsonOpts);
                 if (loaded is not null) Loadout = loaded;
             }
+            if (ReMatchUnmatched(Loadout)) Save();
         }
         catch { /* start empty rather than crash on a corrupt file */ }
+    }
+
+    /// <summary>Re-run the named-item matcher over any UNMATCHED items in a freshly-loaded loadout and
+    /// upgrade the ones that now match high-confidence. Self-heals stored loadouts after a catalog update
+    /// or a matcher improvement (e.g. the level-scaling items that used to miss) so the corrected catalog
+    /// id gets pushed without the user re-hovering every slot. Conservative: only the name / min level /
+    /// Matched flag change — captured mods are left untouched (the planner uses catalog mods for a matched
+    /// item anyway). Returns true if anything changed.</summary>
+    private static bool ReMatchUnmatched(Dictionary<EquipSlot, GearItem> loadout)
+    {
+        bool changed = false;
+        foreach (EquipSlot slot in loadout.Keys.ToList())
+        {
+            GearItem item = loadout[slot];
+            if (item.Matched || string.IsNullOrWhiteSpace(item.Name)) continue;
+            ItemMatch? match = NamedItemMatcher.TryMatch(item.Name, slot, item.MinimumLevel);
+            if (match is { HighConfidence: true })
+            {
+                loadout[slot] = item with
+                {
+                    Name = match.Item.Name,
+                    MinimumLevel = match.Item.MinLevel > 0 ? match.Item.MinLevel : item.MinimumLevel,
+                    IsLikelyNamed = true,
+                    Matched = true,
+                };
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     /// <summary>Read any character's saved loadout WITHOUT changing the active one (for pushing every
@@ -57,6 +88,8 @@ public sealed class CaptureStore
             {
                 var loaded = JsonSerializer.Deserialize<Dictionary<EquipSlot, GearItem>>(File.ReadAllText(path), JsonOpts);
                 if (loaded is not null) result = loaded;
+                if (ReMatchUnmatched(result))
+                    File.WriteAllText(path, JsonSerializer.Serialize(result, JsonOpts));
             }
         }
         catch { /* unreadable → empty */ }
