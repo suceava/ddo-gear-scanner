@@ -13,7 +13,7 @@ Workflow: open the inventory, press the hotkey to start a **detection session**,
 equipped slot on the paper-doll; each tooltip is captured, OCR'd, parsed, tagged with its slot, and
 filled into the loadout sheet (re-capturing a slot overwrites it).
 
-## How it actually works (this diverged a LOT from PLAN.md — trust this file)
+## How it actually works (this diverged a LOT from docs/PLAN.md — trust this file)
 
 **Hotkey** = bare **Insert** by default, via a **low-level keyboard hook** (`LowLevelKeyHook`,
 WH_KEYBOARD_LL) — `RegisterHotKey` gets suppressed over a focused game; the LL hook fires anyway.
@@ -74,7 +74,7 @@ right-pointing gold triangles sharing a dominant x-column; DDO's gold keyword-te
 shape/column), returns their Y-centres, and the parser slices OCR rows into one ▶-block-per-mod,
 extracting Stat+Value from the head and BonusType from the description (`+N <Type> bonus`). This
 killed the run-together + double-counting. Detection + OCR run on the SAME 3x-upscaled crop so the
-coordinates line up. Falls back to line-by-line parse when no bullets are found. See TOOLTIP_FORMAT.md.
+coordinates line up. Falls back to line-by-line parse when no bullets are found. See docs/TOOLTIP_FORMAT.md.
 
 ## App shell — "DDO Companion" (single window, nav rail, pages)
 
@@ -256,11 +256,11 @@ refresh, not a one-off.
 **Catalog data does NOT overwrite LLM-read tooltips.** A scanned item = catalog IDENTITY (name match →
 `Matched`) + INSTANCE stats (the tooltip's real mods — legacy items keep original stats DDO has since
 changed; the catalog can't know your copy). Local-OCR captures still get full catalog mod replacement.
-See **LEGACY_ITEMS.md** for the model, legacy/variant detection design, and the UI-badging parking lot.
+See **docs/LEGACY_ITEMS.md** for the model, legacy/variant detection design, and the UI-badging parking lot.
 
 **Bonus-type STACKING is now data-driven and authoritative.** `BonusTypes.StacksWithSelf` loads the
 self-stacking set from the embedded `bonustypes.json` (`Stacking == "Always"`). The previous
-hand-crawled list (`GAME_RULES.md`) was WRONG — it stacked Artifact/Primal/Circumstance/Feat/Epic
+hand-crawled list (`docs/GAME_RULES.md`) was WRONG — it stacked Artifact/Primal/Circumstance/Feat/Epic
 (actually Highest Only) and missed Destiny/Unique/Penalty/Weapon DR/Armor&Shield Enhancement. The only
 self-stacking types are Armor Enhancement, Destiny, Mythic, Penalty, Reaper, Shield Enhancement,
 Stacking, Unique, Untyped, Weapon DR. `items.json` is generated but not yet consumed (named-item
@@ -295,5 +295,5 @@ Working: capture, motion detection, hotkey-over-game, overlay highlight, slot ca
 local OCR plateaued ~75-80%; local OCR remains the always-on fallback and the polling engine). Window
 placement persists correctly across mixed-DPI monitors (restore gated + re-applied post-render; maximize
 sequenced after the move). **Runs now sync to the web account** (see "Cloud sync" — outbox + live status).
-Next candidates: legacy/variant mod diffing + badges (see LEGACY_ITEMS.md); the **gear/loadout push** to the
+Next candidates: legacy/variant mod diffing + badges (see docs/LEGACY_ITEMS.md); the **gear/loadout push** to the
 backend (runs done, gear is the remaining half); run-history analytics/charting on the web app.

@@ -9,7 +9,7 @@ namespace DdoGearScanner.Vision;
 /// is the bonus type, and a line with no recognized prefix defaults to "Enhancement".
 /// Having a fixed vocabulary is what makes local-OCR mod parsing tractable.
 ///
-/// This list is the living reference for bonus types — keep it in sync with TOOLTIP_FORMAT.md.
+/// This list is the living reference for bonus types — keep it in sync with docs/TOOLTIP_FORMAT.md.
 /// </summary>
 public static class BonusTypes
 {
@@ -19,7 +19,7 @@ public static class BonusTypes
     // Multi-word types (e.g. "Insightful Sheltering" is Stat=Sheltering Type=Insightful, but
     // "Quality" / "Insightful" are the type tokens) are handled by single-token prefix matching.
     // The DDO bonus-type vocabulary. The canonical set is ddowiki Category:Bonus types (see
-    // GAME_RULES.md, which also records each type's STACKING behavior — the planner's math depends
+    // docs/GAME_RULES.md, which also records each type's STACKING behavior — the planner's math depends
     // on it). Deflection / Natural Armor / Dodge are AC bonus types catalogued separately on the
     // wiki but still appear on items, so they're kept here.
     public static readonly IReadOnlyList<string> All = new[]

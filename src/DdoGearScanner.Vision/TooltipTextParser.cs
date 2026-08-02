@@ -13,7 +13,7 @@ namespace DdoGearScanner.Vision;
 /// "name + raw text" rather than data loss.
 ///
 /// Operates on plain strings (not OCR bounding boxes) so it can be unit-tested against saved
-/// text fixtures without launching the game. The format reference lives in TOOLTIP_FORMAT.md.
+/// text fixtures without launching the game. The format reference lives in docs/TOOLTIP_FORMAT.md.
 /// </summary>
 public static partial class TooltipTextParser
 {

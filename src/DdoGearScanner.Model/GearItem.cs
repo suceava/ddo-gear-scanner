@@ -91,7 +91,7 @@ public sealed record GearItem(
     // confidence (the stored Name is the catalog's canonical spelling — the web planner's join key).
     // Whether Mods are catalog data or tooltip-true instance data depends on the reader: local-OCR
     // captures take the catalog's mods; LLM captures keep the tooltip's (legacy items differ from the
-    // catalog by design — see LEGACY_ITEMS.md). RawOcrText always keeps the raw read.
+    // catalog by design — see docs/LEGACY_ITEMS.md). RawOcrText always keeps the raw read.
     bool Matched = false)
 {
     public static GearItem Empty(string rawOcrText) => new(

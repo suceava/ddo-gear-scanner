@@ -16,7 +16,7 @@ public enum StatCategory { Ability, SavingThrow, Defense, Offense, Skill, Other 
 /// This is the one piece of curated game knowledge: a catalog of stat names + a few description
 /// markers — NOT a per-item hand-flagging. It's a starter set modeled on DDOBuilderV2's stat list;
 /// extend it as new stats show up (unknown stats fall to item-local, which never invents an
-/// override). See GAME_RULES.md.
+/// override). See docs/GAME_RULES.md.
 /// </summary>
 public static partial class StatCatalog
 {

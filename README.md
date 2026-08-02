@@ -10,8 +10,8 @@ DDO has no API and no gear export — this is the missing "read my equipped gear
 handles both **named items** (the recognizable chase items) and **random / Cannith-crafted
 items** (no useful name, so every mod is extracted).
 
-> Living references: [TOOLTIP_FORMAT.md](TOOLTIP_FORMAT.md) — how DDO tooltips are structured and
-> how we parse them (read before touching the parser). [PLAN.md](PLAN.md) — the build plan and
+> Living references: [docs/TOOLTIP_FORMAT.md](docs/TOOLTIP_FORMAT.md) — how DDO tooltips are structured and
+> how we parse them (read before touching the parser). [docs/PLAN.md](docs/PLAN.md) — the build plan and
 > phased roadmap. [CLAUDE.md](CLAUDE.md) — orientation for AI/agent sessions.
 
 Modeled on [pg-loot-master](../pg-loot-master) (a Project: Gorgon overlay); the capture, overlay,
@@ -73,7 +73,7 @@ assets/
 ```
 
 Layering: `Model` ← `Vision` ← `App`; `Capture` is independent. **Read [CLAUDE.md](CLAUDE.md) for
-how detection actually works** — it diverged substantially from [PLAN.md](PLAN.md). The OCR backend
+how detection actually works** — it diverged substantially from [docs/PLAN.md](docs/PLAN.md). The OCR backend
 is pluggable behind `ITooltipReader` (local Windows OCR today).
 
 ## Build & test
