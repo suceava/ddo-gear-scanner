@@ -22,6 +22,7 @@ public partial class App : Application
     private HotkeyTrigger? _trigger;
     private DebugDiagnosticsWindow? _diagWindow;
     private RunSyncService? _runSync;
+    private CharacterSyncService? _charSync;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -98,9 +99,16 @@ public partial class App : Application
                 ? run.CharacterName!
                 : charStore.Profiles.FirstOrDefault(p => p.Id == run.CharacterId)?.Name ?? "Unknown");
         _runSync = new RunSyncService(runStore, syncClient);
+        // Character LIST sync (same account, same slug identity) — pushes local characters + pulls the shared
+        // list so the scanner shows the same characters as the web app. Reuses the same API-key config.
+        _charSync = new CharacterSyncService(charStore, syncClient);
         settings.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(AppSettings.SyncApiKey) or nameof(AppSettings.SyncApiBase)) _runSync?.Start();
+            if (e.PropertyName is nameof(AppSettings.SyncApiKey) or nameof(AppSettings.SyncApiBase))
+            {
+                _runSync?.Start();
+                _charSync?.Start();
+            }
         };
 
         // Inventory slot detection (rag-doll anchor + calibrated slot offsets). Template is embedded.
@@ -121,6 +129,7 @@ public partial class App : Application
         // initial state paints, then kick off a drain of anything unsynced from a previous session.
         _runSync.StatusChanged += main.Run.SetSyncStatus;
         _runSync.Start();
+        _charSync.Start();
         main.Gear.DetectionToggleRequested += () => pipeline.ToggleSession();
         main.Gear.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
 
@@ -263,6 +272,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _runSync?.Dispose();
+        _charSync?.Dispose();
         _trigger?.Dispose();
         _coordinator?.Dispose();
         _grabber?.Dispose();

@@ -120,12 +120,12 @@ public partial class ShellWindow : Window
         UpdateCharChip();
     }
 
-    // Same-character test tolerant of case/punctuation/OCR spacing.
+    // Same-character test by the SHARED identity: slug(name), matching the web app + backend (so the chip's
+    // "known character" agrees with what runs/characters key on). Case/punctuation-insensitive.
     private static bool NameEq(string a, string? b)
     {
-        static string N(string? s) => new string((s ?? "").Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
-        string na = N(a);
-        return na.Length > 0 && na == N(b);
+        string na = DdoGearScanner.Model.Slug.Of(a);
+        return na.Length > 0 && na == DdoGearScanner.Model.Slug.Of(b);
     }
 
     private static Brush Frozen(byte r, byte g, byte b)

@@ -11,6 +11,9 @@ namespace DdoGearScanner;
 /// <summary>Live sync settings (API key + base URL). Null from the provider = sync disabled (no key).</summary>
 public sealed record SyncConfig(string ApiKey, string ApiBase);
 
+/// <summary>A character as returned by GET /characters (shared entity, keyed by slug(name)).</summary>
+public sealed record ServerCharacter(string CharacterKey, string Name, int? LastSeenLevel);
+
 /// <summary>
 /// HTTP client for the DDO Gear Planner run-tracker API (see backend/CONTRACT.md in the web repo).
 /// Auth is the per-user API key as a bearer token. Everything is best-effort — any failure returns
@@ -188,6 +191,58 @@ public sealed class RunSyncClient
             return (true, $"Connected as {who}.");
         }
         catch (Exception ex) { return (false, ex.Message); }
+    }
+
+    /// <summary>Upsert the account's characters (POST /characters, one per character; idempotent by slug).
+    /// Returns true only if every upsert succeeded.</summary>
+    public async Task<bool> PushCharactersAsync(IReadOnlyList<(string Key, string Name)> chars, CancellationToken ct = default)
+    {
+        SyncConfig? cfg = _config();
+        if (cfg is null || cfg.ApiKey.Length == 0) return false;
+        bool allOk = true;
+        foreach ((string key, string name) in chars)
+        {
+            if (key.Length == 0) continue;
+            try
+            {
+                object body = new { characterKey = key, name };
+                using HttpRequestMessage req = Authed(HttpMethod.Post, cfg, "/characters");
+                req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                using HttpResponseMessage resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
+                if (!resp.IsSuccessStatusCode) { Log($"char push HTTP {(int)resp.StatusCode} ({key})"); allOk = false; }
+            }
+            catch (Exception ex) { Log($"char push failed ({key}): {ex.Message}"); allOk = false; }
+        }
+        return allOk;
+    }
+
+    /// <summary>Pull the account's characters (GET /characters). Null on any failure/non-200 — the caller MUST
+    /// treat null as "don't merge", never as "the account is empty".</summary>
+    public async Task<IReadOnlyList<ServerCharacter>?> PullCharactersAsync(CancellationToken ct = default)
+    {
+        SyncConfig? cfg = _config();
+        if (cfg is null || cfg.ApiKey.Length == 0) return null;
+        try
+        {
+            using HttpRequestMessage req = Authed(HttpMethod.Get, cfg, "/characters");
+            using HttpResponseMessage resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) { Log($"char pull HTTP {(int)resp.StatusCode}"); return null; }
+            string text = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using JsonDocument doc = JsonDocument.Parse(text);
+            if (!doc.RootElement.TryGetProperty("characters", out JsonElement arr) || arr.ValueKind != JsonValueKind.Array)
+                return null;
+            var list = new List<ServerCharacter>(arr.GetArrayLength());
+            foreach (JsonElement e in arr.EnumerateArray())
+            {
+                string? key = Str(e, "characterKey");
+                string? name = Str(e, "name");
+                if (key is null || name is null) continue;
+                list.Add(new ServerCharacter(key, name, Int(e, "lastSeenLevel")));
+            }
+            Log($"pulled {list.Count} character(s)");
+            return list;
+        }
+        catch (Exception ex) { Log($"char pull failed: {ex.GetType().Name}: {ex.Message}"); return null; }
     }
 
     private static string Truncate(string s, int n)

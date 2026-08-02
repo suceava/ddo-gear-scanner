@@ -49,6 +49,8 @@ public partial class GearLoadoutView : UserControl
         SlotSheet.ItemsSource = _rows;
         RefreshLoadout();
         PopulateCharacters();
+        // Refresh the character list when the store changes (e.g. cloud pull merges in web/run characters).
+        _charStore.Changed += () => Dispatcher.Invoke(PopulateCharacters);
 
         if (!ocrAvailable)
             StatusText.Text = "⚠ Windows OCR engine unavailable — install an OCR language pack (Settings → Language).";
@@ -379,8 +381,7 @@ public partial class GearLoadoutView : UserControl
     /// profile already exists, just activate that one instead of duplicating.</summary>
     public void AddDetectedCharacter(string name, int? level)
     {
-        static string N(string? s) => new string((s ?? "").Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
-        CharacterProfile profile = _charStore.Profiles.FirstOrDefault(p => N(p.Name) == N(name))
+        CharacterProfile profile = _charStore.Profiles.FirstOrDefault(p => p.Id == Slug.Of(name))
             ?? _charStore.Add(name, Playstyle.Unknown, null, level);
         _charStore.SetActive(profile.Id);
         _store.SwitchTo(profile.Id);
@@ -417,6 +418,8 @@ public partial class GearLoadoutView : UserControl
         else if (dlg.Result is not null)
         {
             _charStore.Update(dlg.Result);
+            // A rename changes the id (slug) and moves the loadout file — resync the loadout to the new id.
+            SwitchToCharacter(_charStore.ActiveId);
         }
         PopulateCharacters();
     }
