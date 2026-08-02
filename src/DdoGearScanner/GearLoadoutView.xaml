@@ -102,7 +102,7 @@
                 <ColumnDefinition Width="430" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="#1E2127" CornerRadius="8" Padding="6">
+            <Border Grid.Column="0" Background="{StaticResource BgPanel}" CornerRadius="8" Padding="6">
                 <ListBox x:Name="SlotSheet" Background="Transparent" BorderThickness="0"
                          HorizontalContentAlignment="Stretch" SelectionChanged="SlotSheet_SelectionChanged">
                     <ListBox.ItemTemplate>
@@ -121,9 +121,14 @@
                                     <TextBlock Text="{Binding Name}" FontSize="14">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
+                                                <!-- Normal-ink names by default; named/matched items in blue
+                                                     (matches the in-game blue border + the web planner). -->
                                                 <Setter Property="Foreground" Value="{StaticResource Parchment}" />
                                                 <Setter Property="FontWeight" Value="SemiBold" />
                                                 <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Item.Matched}" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource NamedBlue}" />
+                                                    </DataTrigger>
                                                     <DataTrigger Binding="{Binding HasItem}" Value="False">
                                                         <Setter Property="Foreground" Value="#6B6149" />
                                                         <Setter Property="FontWeight" Value="Normal" />
@@ -140,10 +145,10 @@
                 </ListBox>
             </Border>
 
-            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="#16181D" />
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{StaticResource BgWindow}" />
 
             <!-- Item detail -->
-            <Border Grid.Column="2" Background="#1E2127" CornerRadius="8" Padding="14">
+            <Border Grid.Column="2" Background="{StaticResource BgPanel}" CornerRadius="8" Padding="14">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <Border Background="{StaticResource BgInput}" CornerRadius="6" Padding="6" Margin="0,0,0,10">
@@ -167,7 +172,7 @@
                         <TextBlock x:Name="LastName" FontSize="17" FontWeight="SemiBold" TextWrapping="Wrap"
                                    Text="(select a slot)" />
                         <TextBlock x:Name="LastMeta" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,3,0,0" />
-                        <TextBlock x:Name="LastReadInfo" Foreground="#6B7280" FontSize="11" Margin="0,2,0,0" />
+                        <TextBlock x:Name="LastReadInfo" Foreground="{StaticResource TextMuted}" FontSize="11" Margin="0,2,0,0" />
 
                         <TextBlock Text="MODS" Style="{StaticResource Section}" />
                         <ItemsControl x:Name="ModsList">
@@ -181,7 +186,7 @@
                                         </Grid.ColumnDefinitions>
                                         <!-- Split model (DDOBuilderV2): Stat name | Value | BonusType. -->
                                         <TextBlock Grid.Column="0" Text="{Binding Stat}" TextWrapping="Wrap" />
-                                        <TextBlock Grid.Column="1" Text="{Binding ValueText}" Foreground="#8FCF8A"
+                                        <TextBlock Grid.Column="1" Text="{Binding ValueText}" Foreground="{StaticResource Good}"
                                                    HorizontalAlignment="Right" />
                                         <TextBlock Grid.Column="2" Text="{Binding BonusType}" Foreground="{StaticResource Gold}"
                                                    Margin="10,0,0,0" />
@@ -197,7 +202,7 @@
                                     <TextBlock Margin="0,1">
                                         <Run Text="{Binding Color}" />
                                         <Run Text="{Binding Filled}" Foreground="{StaticResource TextMuted}" />
-                                        <Run Text="{Binding IsEmpty, StringFormat='empty={0}'}" Foreground="#6B7280" />
+                                        <Run Text="{Binding IsEmpty, StringFormat='empty={0}'}" Foreground="{StaticResource TextMuted}" />
                                     </TextBlock>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

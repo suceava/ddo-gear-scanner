@@ -184,6 +184,7 @@ public partial class GearLoadoutView : UserControl
         if (item is null)
         {
             LastName.Text = "— empty —";
+            LastName.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "Parchment");
             LastMeta.Text = ""; LastReadInfo.Text = ""; LastBinding.Text = ""; RawText.Text = "";
             ModsList.ItemsSource = null; AugList.ItemsSource = null; SetList.ItemsSource = null;
             CropImage.Source = null;
@@ -191,8 +192,11 @@ public partial class GearLoadoutView : UserControl
         }
 
         LastName.Text = string.IsNullOrWhiteSpace(item.Name) ? "(no name read)" : item.Name;
+        // Named/matched items in blue (in-game blue border + web planner); everything else normal ink.
+        LastName.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty,
+            item.Matched ? "NamedBlue" : "Parchment");
         LastMeta.Text = $"ML {item.MinimumLevel?.ToString() ?? "?"}  ·  {item.Slot}  ·  {item.ItemTypeText ?? "type ?"}";
-        string origin = item.Matched ? "✦ matched · DDOBuilder catalog"
+        string origin = item.Matched ? "matched · DDOBuilder catalog"
                                      : (item.IsLikelyNamed ? "likely NAMED" : "random/crafted");
         LastReadInfo.Text = origin
                             + $"  ·  {item.Mods.Count} mods  ·  {item.CapturedUtc.ToLocalTime():HH:mm:ss}";

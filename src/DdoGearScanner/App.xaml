@@ -4,19 +4,22 @@
              xmlns:local="clr-namespace:DdoGearScanner"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-        <!-- ===== DDO-inspired palette: warm dark stone + gold trim + parchment text ===== -->
-        <SolidColorBrush x:Key="BgWindow"    Color="#15110B" />
-        <SolidColorBrush x:Key="BgPanel"     Color="#1E1810" />
-        <SolidColorBrush x:Key="BgPanelAlt"  Color="#272013" />
-        <SolidColorBrush x:Key="BgRaised"    Color="#2E2616" />
+        <!-- ===== Palette aligned to the web planner (frontend/src/index.css :root) so the two apps
+             share one warm gold-on-dark look. Keys stay stable; only the hexes track the planner tokens. ===== -->
+        <SolidColorBrush x:Key="BgWindow"    Color="#0A0A0D" />  <!-- planner color-bg -->
+        <SolidColorBrush x:Key="BgPanel"     Color="#141109" />  <!-- planner color-panel -->
+        <SolidColorBrush x:Key="BgPanelAlt"  Color="#1C1810" />  <!-- planner color-panel2 -->
+        <SolidColorBrush x:Key="BgRaised"    Color="#241D12" />
         <SolidColorBrush x:Key="BgInput"     Color="#100C07" />
-        <SolidColorBrush x:Key="BorderDim"   Color="#3A301E" />
+        <SolidColorBrush x:Key="BorderDim"   Color="#3D3420" />  <!-- planner color-line -->
         <SolidColorBrush x:Key="BorderGold"  Color="#8A6E33" />
-        <SolidColorBrush x:Key="Gold"        Color="#C9A24B" />
+        <SolidColorBrush x:Key="Gold"        Color="#D8B451" />  <!-- planner color-accent -->
         <SolidColorBrush x:Key="GoldBright"  Color="#E6C66A" />
-        <SolidColorBrush x:Key="Parchment"   Color="#C2B89C" />
-        <SolidColorBrush x:Key="ParchStrong" Color="#D6CCAE" />
-        <SolidColorBrush x:Key="TextMuted"   Color="#8C8068" />
+        <SolidColorBrush x:Key="Parchment"   Color="#DDD6C4" />  <!-- planner color-ink -->
+        <SolidColorBrush x:Key="ParchStrong" Color="#ECE5D1" />
+        <SolidColorBrush x:Key="TextMuted"   Color="#97906F" />  <!-- planner color-dim -->
+        <SolidColorBrush x:Key="NamedBlue"   Color="#58A6FF" />  <!-- planner color-rarity (named items) -->
+        <SolidColorBrush x:Key="Good"        Color="#63CF93" />  <!-- planner color-good -->
         <SolidColorBrush x:Key="SelectionBg" Color="#3D2F15" />
         <SolidColorBrush x:Key="HoverBg"     Color="#2C2313" />
 
