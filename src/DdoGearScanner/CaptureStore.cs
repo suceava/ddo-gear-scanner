@@ -22,6 +22,10 @@ public sealed class CaptureStore
     public string CharacterId { get; private set; } = "";
     public Dictionary<EquipSlot, GearItem> Loadout { get; private set; } = new();
 
+    /// <summary>Fires when the active character's gear CHANGES (set/remove/clear) — not on a plain switch/load.
+    /// Drives the cloud loadout push (LoadoutSyncService).</summary>
+    public event Action? Changed;
+
     private string StorePath => Path.Combine(Dir, $"loadout-{CharacterId}.json");
 
     /// <summary>Load the given character's loadout, replacing the current one.</summary>
@@ -40,11 +44,31 @@ public sealed class CaptureStore
         catch { /* start empty rather than crash on a corrupt file */ }
     }
 
+    /// <summary>Read any character's saved loadout WITHOUT changing the active one (for pushing every
+    /// character's loadout to the cloud). Empty dict if none / unreadable.</summary>
+    public static Dictionary<EquipSlot, GearItem> ReadLoadout(string characterId)
+    {
+        var result = new Dictionary<EquipSlot, GearItem>();
+        if (string.IsNullOrEmpty(characterId)) return result;
+        try
+        {
+            string path = Path.Combine(Dir, $"loadout-{characterId}.json");
+            if (File.Exists(path))
+            {
+                var loaded = JsonSerializer.Deserialize<Dictionary<EquipSlot, GearItem>>(File.ReadAllText(path), JsonOpts);
+                if (loaded is not null) result = loaded;
+            }
+        }
+        catch { /* unreadable → empty */ }
+        return result;
+    }
+
     /// <summary>Set (overwrite) the item in a slot.</summary>
     public void SetSlot(EquipSlot slot, GearItem item)
     {
         Loadout[slot] = item;
         Save();
+        Changed?.Invoke();
     }
 
     public GearItem? Get(EquipSlot slot) => Loadout.TryGetValue(slot, out GearItem? i) ? i : null;
@@ -54,13 +78,18 @@ public sealed class CaptureStore
 
     public void Remove(EquipSlot slot)
     {
-        if (Loadout.Remove(slot)) Save();
+        if (Loadout.Remove(slot))
+        {
+            Save();
+            Changed?.Invoke();
+        }
     }
 
     public void Clear()
     {
         Loadout.Clear();
         Save();
+        Changed?.Invoke();
     }
 
     public void Save()

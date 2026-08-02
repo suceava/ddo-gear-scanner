@@ -245,6 +245,40 @@ public sealed class RunSyncClient
         catch (Exception ex) { Log($"char pull failed: {ex.GetType().Name}: {ex.Message}"); return null; }
     }
 
+    /// <summary>Upsert a character's equipped loadout (POST /loadouts). Matched items carry the catalog id
+    /// (slug(name)-ml&lt;ML&gt;); all slots carry the captured mods so the planner can analyze unmatched gear.
+    /// Best-effort.</summary>
+    public async Task<bool> PushLoadoutAsync(string characterKey, IReadOnlyDictionary<EquipSlot, GearItem> loadout, CancellationToken ct = default)
+    {
+        SyncConfig? cfg = _config();
+        if (cfg is null || cfg.ApiKey.Length == 0 || characterKey.Length == 0) return false;
+        try
+        {
+            var slots = new Dictionary<string, object>();
+            foreach ((EquipSlot slot, GearItem item) in loadout)
+            {
+                int? ml = item.MinimumLevel;
+                string? itemId = item.Matched && ml.HasValue ? $"{Slug.Of(item.Name)}-ml{ml.Value}" : null;
+                slots[slot.ToString()] = new
+                {
+                    itemId,
+                    name = item.Name,
+                    minLevel = ml,
+                    matched = item.Matched,
+                    mods = item.Mods.Select(m => new { stat = m.Stat, value = m.Value, bonusType = m.BonusType, isPercent = m.IsPercent }).ToArray(),
+                };
+            }
+            object body = new { characterKey, source = "scanner", slots };
+            using HttpRequestMessage req = Authed(HttpMethod.Post, cfg, "/loadouts");
+            req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+            using HttpResponseMessage resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) { Log($"loadout push HTTP {(int)resp.StatusCode}"); return false; }
+            Log($"pushed loadout {characterKey} ({slots.Count} slot(s))");
+            return true;
+        }
+        catch (Exception ex) { Log($"loadout push failed: {ex.GetType().Name}: {ex.Message}"); return false; }
+    }
+
     private static string Truncate(string s, int n)
     {
         s = s.Replace("\r", "").Replace('\n', ' ');

@@ -23,6 +23,7 @@ public partial class App : Application
     private DebugDiagnosticsWindow? _diagWindow;
     private RunSyncService? _runSync;
     private CharacterSyncService? _charSync;
+    private LoadoutSyncService? _loadoutSync;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -102,12 +103,15 @@ public partial class App : Application
         // Character LIST sync (same account, same slug identity) — pushes local characters + pulls the shared
         // list so the scanner shows the same characters as the web app. Reuses the same API-key config.
         _charSync = new CharacterSyncService(charStore, syncClient);
+        // Push every character's equipped loadout (the web planner reads it) — on startup + on gear change.
+        _loadoutSync = new LoadoutSyncService(store, charStore, syncClient);
         settings.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(AppSettings.SyncApiKey) or nameof(AppSettings.SyncApiBase))
             {
                 _runSync?.Start();
                 _charSync?.Start();
+                _loadoutSync?.Start();
             }
         };
 
@@ -130,6 +134,7 @@ public partial class App : Application
         _runSync.StatusChanged += main.Run.SetSyncStatus;
         _runSync.Start();
         _charSync.Start();
+        _loadoutSync.Start();
         main.Gear.DetectionToggleRequested += () => pipeline.ToggleSession();
         main.Gear.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
 
@@ -273,6 +278,7 @@ public partial class App : Application
     {
         _runSync?.Dispose();
         _charSync?.Dispose();
+        _loadoutSync?.Dispose();
         _trigger?.Dispose();
         _coordinator?.Dispose();
         _grabber?.Dispose();
