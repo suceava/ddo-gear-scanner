@@ -714,7 +714,16 @@ public sealed class RunTrackerPipeline
                     // popup lives in the completion region (not the tracker), so it can't match itself.
                     // Debounced so a one-frame fuzzy fluke can't spawn a run. (Trade-off: an instance that never
                     // shows a readable title — a rare camp/social spot — needs a manual Start.)
-                    bool insideQuest = !lingering && TrackerShowsQuest(tracker, pe.Name);
+                    // You've ENTERED only once the tracker stops showing the area you were standing in when
+                    // the popup appeared (_armedArea). Without this, a quest named after its hub — e.g. "The
+                    // Battle for Eveningstar" started while standing in Eveningstar, which the fast OCR often
+                    // truncates to just "Eveningstar" — matches the AREA name in the tracker and false-starts
+                    // before you zone in. In-instance the quest title differs from the area, so a real entry
+                    // still starts. Exact (Key) area match, NOT fuzzy: the in-instance title may CONTAIN the
+                    // area name ("...Eveningstar"), and that must still count as entered.
+                    bool trackerShowsArea = _armedArea is { Length: > 0 }
+                        && (NameEq(tracker.Name, _armedArea) || (tracker.Lines?.Any(l => NameEq(l, _armedArea)) ?? false));
+                    bool insideQuest = !lingering && !trackerShowsArea && TrackerShowsQuest(tracker, pe.Name);
                     if (insideQuest)
                     {
                         if (++_pendingCount >= StartDebounce)
