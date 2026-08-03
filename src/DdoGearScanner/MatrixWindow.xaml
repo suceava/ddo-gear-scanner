@@ -33,10 +33,9 @@
                         <TextBlock Text="+N counts" Foreground="#8FCF8A" />
                     </Border>
                     <Border Background="#35201C" CornerRadius="9" Padding="9,2" Margin="0,0,8,0">
-                        <TextBlock Text="+N overridden" Foreground="#DA6E5E"
-                                   TextDecorations="Strikethrough" />
+                        <TextBlock Text="(N) overridden" Foreground="#DA6E5E" />
                     </Border>
-                    <TextBlock Text="A/B/C = gear priority (gold/silver/bronze) · &quot;= N&quot; shows a sum only where a type actually stacks"
+                    <TextBlock Text="A/B/C = gear priority bands (gold/silver/bronze); a stat's bonus types are listed under it"
                                Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" />
                 </StackPanel>
             </DockPanel>
