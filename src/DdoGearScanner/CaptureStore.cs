@@ -41,35 +41,46 @@ public sealed class CaptureStore
                 var loaded = JsonSerializer.Deserialize<Dictionary<EquipSlot, GearItem>>(File.ReadAllText(StorePath), JsonOpts);
                 if (loaded is not null) Loadout = loaded;
             }
-            if (ReMatchUnmatched(Loadout)) Save();
+            if (HealLoadout(Loadout)) Save();
         }
         catch { /* start empty rather than crash on a corrupt file */ }
     }
 
-    /// <summary>Re-run the named-item matcher over any UNMATCHED items in a freshly-loaded loadout and
-    /// upgrade the ones that now match high-confidence. Self-heals stored loadouts after a catalog update
-    /// or a matcher improvement (e.g. the level-scaling items that used to miss) so the corrected catalog
-    /// id gets pushed without the user re-hovering every slot. Conservative: only the name / min level /
-    /// Matched flag change — captured mods are left untouched (the planner uses catalog mods for a matched
-    /// item anyway). Returns true if anything changed.</summary>
-    private static bool ReMatchUnmatched(Dictionary<EquipSlot, GearItem> loadout)
+    /// <summary>Self-heal a freshly-loaded loadout so it reflects the current catalog + parsing rules,
+    /// without the user re-hovering every slot. Two passes per item: (1) normalize mods so a captured
+    /// "Insightful Strength" splits to (Strength, Insightful) matching the catalog's model; (2) re-run the
+    /// named-item matcher over unmatched items and upgrade the ones that now match high-confidence (e.g.
+    /// level-scaling items that used to miss). Conservative on the match: only name / min level / Matched
+    /// change. Returns true if anything changed (caller re-saves + the next push carries the fix).</summary>
+    private static bool HealLoadout(Dictionary<EquipSlot, GearItem> loadout)
     {
         bool changed = false;
         foreach (EquipSlot slot in loadout.Keys.ToList())
         {
             GearItem item = loadout[slot];
-            if (item.Matched || string.IsNullOrWhiteSpace(item.Name)) continue;
-            ItemMatch? match = NamedItemMatcher.TryMatch(item.Name, slot, item.MinimumLevel);
-            if (match is { HighConfidence: true })
+
+            var normMods = ModNormalizer.NormalizeAll(item.Mods);
+            if (!normMods.SequenceEqual(item.Mods))
             {
-                loadout[slot] = item with
-                {
-                    Name = match.Item.Name,
-                    MinimumLevel = match.Item.MinLevel > 0 ? match.Item.MinLevel : item.MinimumLevel,
-                    IsLikelyNamed = true,
-                    Matched = true,
-                };
+                item = item with { Mods = normMods };
+                loadout[slot] = item;
                 changed = true;
+            }
+
+            if (!item.Matched && !string.IsNullOrWhiteSpace(item.Name))
+            {
+                ItemMatch? match = NamedItemMatcher.TryMatch(item.Name, slot, item.MinimumLevel);
+                if (match is { HighConfidence: true })
+                {
+                    loadout[slot] = item with
+                    {
+                        Name = match.Item.Name,
+                        MinimumLevel = match.Item.MinLevel > 0 ? match.Item.MinLevel : item.MinimumLevel,
+                        IsLikelyNamed = true,
+                        Matched = true,
+                    };
+                    changed = true;
+                }
             }
         }
         return changed;
@@ -88,7 +99,7 @@ public sealed class CaptureStore
             {
                 var loaded = JsonSerializer.Deserialize<Dictionary<EquipSlot, GearItem>>(File.ReadAllText(path), JsonOpts);
                 if (loaded is not null) result = loaded;
-                if (ReMatchUnmatched(result))
+                if (HealLoadout(result))
                     File.WriteAllText(path, JsonSerializer.Serialize(result, JsonOpts));
             }
         }

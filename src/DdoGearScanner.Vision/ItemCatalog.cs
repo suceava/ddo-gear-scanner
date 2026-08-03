@@ -27,8 +27,17 @@ public static class ItemCatalog
 {
     private static readonly IReadOnlyList<CatalogItem> _all = Load();
     private static readonly IReadOnlyDictionary<EquipSlot, List<CatalogItem>> _bySlot = IndexBySlot(_all);
+    private static readonly HashSet<string> _knownStats = _all
+        .SelectMany(i => i.Mods).Select(m => m.Stat.Trim())
+        .Where(s => s.Length > 0)
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     public static IReadOnlyList<CatalogItem> All => _all;
+
+    /// <summary>Every stat name the catalog uses (the authoritative stat vocabulary). Used to normalize
+    /// captured mods: a split like "Insightful Strength" → (Strength, Insightful) is accepted only when
+    /// the remainder ("Strength") is a real catalog stat — which also mirrors the catalog's own casing.</summary>
+    public static bool IsKnownStat(string stat) => _knownStats.Contains(stat.Trim());
 
     /// <summary>Items that can be equipped in <paramref name="slot"/> (empty if none / Unknown).</summary>
     public static IReadOnlyList<CatalogItem> ForSlot(EquipSlot slot)

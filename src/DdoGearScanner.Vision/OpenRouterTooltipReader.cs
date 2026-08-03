@@ -81,11 +81,13 @@ public sealed class OpenRouterTooltipReader : ITooltipReader
                     string? stat = Str(m, "stat");
                     if (string.IsNullOrWhiteSpace(stat)) continue;
                     double value = m.TryGetProperty("value", out JsonElement v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0;
-                    mods.Add(new Mod(
+                    // The LLM is told stat may include the bonus type ("Insightful Constitution"); split it
+                    // back out so captured mods match the catalog's Stat/BonusType model (see ModNormalizer).
+                    mods.Add(ModNormalizer.Normalize(new Mod(
                         stat.Trim(), value,
                         string.IsNullOrWhiteSpace(Str(m, "bonusType")) ? "Enhancement" : Str(m, "bonusType")!.Trim(),
                         m.TryGetProperty("isPercent", out JsonElement p) && p.ValueKind == JsonValueKind.True,
-                        Str(m, "description")));
+                        Str(m, "description"))));
                 }
 
             var augments = new List<AugmentSlot>();
