@@ -38,7 +38,7 @@
     </UserControl.Resources>
 
     <DockPanel>
-        <!-- Compact control bar (the nav rail already labels this page "Run Tracker") -->
+        <!-- Compact control bar (the nav rail already labels this page "Runs") -->
         <Border DockPanel.Dock="Top" Background="{StaticResource BgPanel}" Padding="20,10"
                 BorderBrush="{StaticResource BorderGold}" BorderThickness="0,0,0,1">
             <DockPanel LastChildFill="False">

@@ -14,7 +14,7 @@ using DdoGearScanner.Vision;
 namespace DdoGearScanner;
 
 /// <summary>
-/// The Run Tracker page: logged dungeon runs for the active character (dungeon, difficulty, level,
+/// The Runs page: logged dungeon runs for the active character (dungeon, difficulty, level,
 /// duration, XP, XP/min) plus a live status card for the run in progress. Dungeon/difficulty/XP are
 /// inline-editable (best-effort OCR, hand-correctable — same pattern as the gear editor). New runs
 /// stream in from <see cref="RunTrackerPipeline"/> as they finalize. Hosted as a page inside

@@ -4,15 +4,15 @@ namespace DdoGearScanner;
 
 /// <summary>
 /// The landing page inside <see cref="ShellWindow"/>: product mark + two feature tiles that navigate
-/// to the Gear Loadout and Run Tracker pages. Deliberately light — the nav rail is always available,
+/// to the Loadout and Runs pages. Deliberately light — the nav rail is always available,
 /// so this is just a friendly entry point.
 /// </summary>
 public partial class HomeView : UserControl
 {
-    /// <summary>Raised when the user clicks the Gear Loadout tile.</summary>
+    /// <summary>Raised when the user clicks the Loadout tile.</summary>
     public event Action? NavigateGear;
 
-    /// <summary>Raised when the user clicks the Run Tracker tile.</summary>
+    /// <summary>Raised when the user clicks the Runs tile.</summary>
     public event Action? NavigateRun;
 
     public HomeView() => InitializeComponent();

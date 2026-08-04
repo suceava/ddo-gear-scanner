@@ -21,7 +21,7 @@
         <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
                 CornerRadius="4" Padding="14,10,14,14" Margin="0,16,0,0">
             <StackPanel>
-                <TextBlock Text="Run Tracker" Style="{StaticResource Section}" Margin="0,0,0,2" />
+                <TextBlock Text="Runs" Style="{StaticResource Section}" Margin="0,0,0,2" />
                 <CheckBox Content="Show region borders on game (calibrated boxes)"
                           IsChecked="{Binding RunDebugOverlay}" IsEnabled="{Binding DebugMode}" />
                 <CheckBox Content="Show detected chat text (live OCR — new lines in green)"
@@ -34,7 +34,7 @@
         <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
                 CornerRadius="4" Padding="14,10,14,14" Margin="0,12,0,0">
             <StackPanel>
-                <TextBlock Text="Gear Loadout" Style="{StaticResource Section}" Margin="0,0,0,2" />
+                <TextBlock Text="Loadout" Style="{StaticResource Section}" Margin="0,0,0,2" />
                 <CheckBox Content="Save capture screenshots to disk" ToolTip="Troubleshooting — writes debug\gear\ (one image per capture)"
                           IsChecked="{Binding DebugDumpGearCrops}" IsEnabled="{Binding DebugMode}" />
             </StackPanel>

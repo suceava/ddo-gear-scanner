@@ -126,7 +126,7 @@ public partial class App : Application
         overlay.Show();
         overlay.AttachTracker(_tracker);
 
-        // The "DDO Companion" shell hosts the Gear Loadout + Run Tracker pages; App routes the
+        // The "DDO Companion" shell hosts the Loadout + Runs pages; App routes the
         // gear/run pipeline events to the embedded views via main.Gear / main.Run.
         ShellWindow main = new(store, charStore, runStore, runPipeline, settings, reader.IsAvailable);
         // Cloud-sync status shows in the Run tracker's control bar; subscribe before the first drain so the

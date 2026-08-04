@@ -11,7 +11,7 @@ using DdoGearScanner.Model;
 namespace DdoGearScanner;
 
 /// <summary>
-/// The Gear Loadout page: the equipped LOADOUT sheet (one row per equipment slot, filled as you
+/// The Loadout page: the equipped LOADOUT sheet (one row per equipment slot, filled as you
 /// capture; re-capturing a slot overwrites it) on the left, and the selected item's detail + tooltip
 /// image on the right. Hosted as a page inside <see cref="ShellWindow"/>. Character selection and the
 /// global menu live on the shell; this view owns only gear-specific actions (detection, calibrate
@@ -353,7 +353,7 @@ public partial class GearLoadoutView : UserControl
         foreach (SlotRow row in _rows) row.Item = _store.Get(row.Slot);
     }
 
-    // ---- characters (which character's loadout you're viewing; the Run Tracker auto-detects its own) ----
+    // ---- characters (which character's loadout you're viewing; the Runs auto-detects its own) ----
 
     private void PopulateCharacters()
     {

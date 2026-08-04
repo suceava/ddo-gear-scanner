@@ -8,8 +8,8 @@ namespace DdoGearScanner;
 
 /// <summary>
 /// The "DDO Companion" main window: a global header (product mark + active-character selector + a
-/// global menu) and a left nav rail that swaps the active feature <b>page</b> (Home, Gear Loadout,
-/// Run Tracker) in a content host. The click-through overlay, calibration, and debug windows remain
+/// global menu) and a left nav rail that swaps the active feature <b>page</b> (Home, Loadout,
+/// Runs) in a content host. The click-through overlay, calibration, and debug windows remain
 /// separate floating windows launched by <see cref="App"/> / the pages — only the two data views are
 /// embedded here. Character selection is global (both pages read the active character).
 /// </summary>
@@ -23,10 +23,10 @@ public partial class ShellWindow : Window
     private static readonly Brush CharMatched = Frozen(0x8F, 0xCF, 0x8A);   // green — detected name has a profile
     private static readonly Brush CharUnknown = Frozen(0xE8, 0xB3, 0x4A);   // amber — detected, no profile yet
 
-    /// <summary>The Gear Loadout page — exposed so <see cref="App"/> can route gear-pipeline events to it.</summary>
+    /// <summary>The Loadout page — exposed so <see cref="App"/> can route gear-pipeline events to it.</summary>
     public GearLoadoutView Gear { get; }
 
-    /// <summary>The Run Tracker page — exposed so <see cref="App"/> can wire its calibrate action.</summary>
+    /// <summary>The Runs page — exposed so <see cref="App"/> can wire its calibrate action.</summary>
     public RunTrackerView Run { get; }
 
     private readonly HomeView _home;

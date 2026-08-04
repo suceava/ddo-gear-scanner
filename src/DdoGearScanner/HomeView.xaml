@@ -40,14 +40,14 @@
             <UniformGrid Columns="2" Margin="0,28,0,0">
                 <Button Style="{StaticResource Tile}" Margin="0,0,8,0" Click="Gear_Click">
                     <StackPanel>
-                        <TextBlock Text="Gear Loadout" FontSize="19" Style="{StaticResource Title}" />
+                        <TextBlock Text="Loadout" FontSize="19" Style="{StaticResource Title}" />
                         <TextBlock Text="Scan equipped gear tooltips into a per-character loadout sheet — mods, augments, set bonuses, and the stacking matrix."
                                    Foreground="{StaticResource TextMuted}" FontSize="12.5" TextWrapping="Wrap" Margin="0,8,0,0" />
                     </StackPanel>
                 </Button>
                 <Button Style="{StaticResource Tile}" Margin="8,0,0,0" Click="Run_Click">
                     <StackPanel>
-                        <TextBlock Text="Run Tracker" FontSize="19" Style="{StaticResource Title}" />
+                        <TextBlock Text="Runs" FontSize="19" Style="{StaticResource Title}" />
                         <TextBlock Text="Automatically log dungeon runs — quest, difficulty, level, time, and XP — with a live status card and an editable history."
                                    Foreground="{StaticResource TextMuted}" FontSize="12.5" TextWrapping="Wrap" Margin="0,8,0,0" />
                     </StackPanel>
