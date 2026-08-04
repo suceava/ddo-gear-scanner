@@ -34,6 +34,13 @@ public sealed class RunSyncClient
 
     public bool IsConfigured => _config() is { ApiKey.Length: > 0 };
 
+    /// <summary>A run can be pushed only if the API's required fields are present — a resolved character name
+    /// (OCR'd, else the active profile) and a dungeon name (enteredUtc/completed are always set). Guards the
+    /// outbox so one bad capture can't 400 the whole batch: non-pushable runs stay local and unsynced for the
+    /// user to fix (edit the missing field → it becomes pushable) or delete, never silently dropped.</summary>
+    public bool IsPushable(RunRecord r) =>
+        !string.IsNullOrWhiteSpace(_characterName(r)) && !string.IsNullOrWhiteSpace(r.DungeonName);
+
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ddo-gear-scanner.log");
     private static void Log(string m) { try { File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} [sync] {m}{Environment.NewLine}"); } catch { } }
 

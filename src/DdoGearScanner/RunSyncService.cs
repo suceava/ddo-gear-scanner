@@ -82,8 +82,13 @@ public sealed class RunSyncService : IDisposable
                 IReadOnlyList<RunRecord> pending = _store.Unsynced();
                 if (pending.Count == 0) break;
 
-                Report(new SyncStatus(SyncState.Syncing, pending.Count));
-                foreach (RunRecord[] chunk in pending.Chunk(BatchMax))
+                // Only push runs with the API's required fields; a run missing character/dungeon stays local and
+                // unsynced (never sent) so one bad capture can't 400 the whole batch and block everything.
+                List<RunRecord> pushable = pending.Where(_client.IsPushable).ToList();
+                if (pushable.Count == 0) break;
+
+                Report(new SyncStatus(SyncState.Syncing, pushable.Count));
+                foreach (RunRecord[] chunk in pushable.Chunk(BatchMax))
                 {
                     bool ok = await _client.PushAsync(chunk, default).ConfigureAwait(false);
                     if (!ok)
@@ -97,7 +102,12 @@ public sealed class RunSyncService : IDisposable
 
             // Pull half: bring down web edits/deletes. Runs even when there was nothing to push (pending==0).
             await PullAndReconcileAsync().ConfigureAwait(false);
-            Report(new SyncStatus(SyncState.Synced));
+            // Anything still unsynced now is un-pushable (missing character or dungeon name) — surface it so the
+            // user can fix or delete those runs, rather than a silently-stuck sync.
+            int blocked = _store.Unsynced().Count;
+            Report(blocked > 0
+                ? new SyncStatus(SyncState.Error, blocked, $"{blocked} run(s) can't sync — missing character or dungeon name. Edit or delete them.")
+                : new SyncStatus(SyncState.Synced));
         }
         finally { _drainGate.Release(); }
     }
