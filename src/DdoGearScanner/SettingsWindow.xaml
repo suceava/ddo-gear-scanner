@@ -51,19 +51,30 @@
         <Border Background="{StaticResource BgPanel}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
                 CornerRadius="4" Padding="14,10,14,14" Margin="0,12,0,0">
             <StackPanel>
-                <TextBlock Text="DDO Gear Planner account (cloud sync)" Style="{StaticResource Section}" Margin="0,0,0,2" />
+                <TextBlock Text="DDO Companion account (cloud sync)" Style="{StaticResource Section}" Margin="0,0,0,2" />
                 <TextBlock Foreground="{StaticResource TextMuted}" FontSize="11.5" TextWrapping="Wrap" Margin="0,2,0,8"
                            Text="Sync your dungeon runs to your account so you can filter and chart them on the web. Sign in at ddo.gnarlybits.com, open Account, generate a key, and paste it here. Leave blank to keep runs on this machine only." />
 
-                <TextBlock Text="API key" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,4,0,0" />
-                <TextBox x:Name="SyncKeyBox" Text="{Binding SyncApiKey, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0"
-                         FontFamily="Consolas" TextChanged="SyncKeyBox_TextChanged" />
-                <TextBlock x:Name="SyncKeyIdText" Foreground="{StaticResource TextMuted}" FontSize="10.5" Margin="0,3,0,0"
-                           TextWrapping="Wrap" />
-                <TextBlock Text="Stored in settings.json on this machine." Foreground="{StaticResource TextMuted}" FontSize="10.5" Margin="0,2,0,0" />
+                <!-- Connected: show the account-matchable Key ID, NOT the raw secret (you never need to read it). -->
+                <StackPanel x:Name="SyncConnectedPanel" Visibility="Collapsed">
+                    <TextBlock x:Name="SyncKeyIdText" FontFamily="Consolas" FontSize="13" Foreground="{StaticResource Parchment}"
+                               Margin="0,4,0,0" TextWrapping="Wrap" />
+                    <TextBlock Text="This ID matches your key on the web Account page. The key itself is stored on this machine."
+                               Foreground="{StaticResource TextMuted}" FontSize="10.5" Margin="0,2,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <!-- Entry: paste a key (only when none is set, or you click Change). -->
+                <StackPanel x:Name="SyncEntryPanel">
+                    <TextBlock Text="Paste the key from the web Account page" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,4,0,0" />
+                    <TextBox x:Name="SyncKeyBox" Text="{Binding SyncApiKey, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0"
+                             FontFamily="Consolas" />
+                    <TextBlock Text="Stored in settings.json on this machine." Foreground="{StaticResource TextMuted}" FontSize="10.5" Margin="0,2,0,0" />
+                </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                    <Button x:Name="SyncTestButton" Content="Test connection" Click="SyncTest_Click" />
+                    <Button x:Name="SyncChangeButton" Content="Change key" Click="SyncChangeKey_Click" Visibility="Collapsed" />
+                    <Button x:Name="SyncDoneButton" Content="Done" Click="SyncDone_Click" />
+                    <Button x:Name="SyncTestButton" Content="Test connection" Click="SyncTest_Click" Margin="8,0,0,0" />
                     <TextBlock x:Name="SyncTestResult" VerticalAlignment="Center" Margin="10,0,0,0" FontSize="12"
                                Foreground="{StaticResource TextMuted}" TextWrapping="Wrap" MaxWidth="300" />
                 </StackPanel>

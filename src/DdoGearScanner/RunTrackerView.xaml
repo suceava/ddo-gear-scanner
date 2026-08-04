@@ -49,7 +49,7 @@
                 <!-- Cloud-sync status (answers "did my runs sync?" at a glance). Set live from RunSyncService. -->
                 <TextBlock x:Name="SyncStatusText" DockPanel.Dock="Left" VerticalAlignment="Center"
                            FontSize="12.5" Foreground="{StaticResource TextMuted}" Text="☁ Sync off"
-                           ToolTip="Add your DDO Gear Planner key in Settings to sync runs" />
+                           ToolTip="Add your DDO Companion key in Settings to sync runs" />
             </DockPanel>
         </Border>
 

@@ -111,7 +111,7 @@ public sealed class AppSettings : INotifyPropertyChanged
     private string _openRouterModel = "google/gemini-2.5-flash";
     public string OpenRouterModel { get => _openRouterModel; set => Set(ref _openRouterModel, value); }
 
-    // ---- Cloud sync (DDO Gear Planner account) ----
+    // ---- Cloud sync (DDO Companion account) ----
     // Per-user API key minted at ddo.gnarlybits.com → Account, pasted here. When set, finalized runs are
     // pushed to the account (name-scoped to that user). Empty = sync off (runs stay local). Stored plaintext
     // by explicit user choice, like the OpenRouter key.

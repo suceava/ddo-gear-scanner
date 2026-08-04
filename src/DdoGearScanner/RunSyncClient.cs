@@ -15,7 +15,7 @@ public sealed record SyncConfig(string ApiKey, string ApiBase);
 public sealed record ServerCharacter(string CharacterKey, string Name, int? LastSeenLevel);
 
 /// <summary>
-/// HTTP client for the DDO Gear Planner run-tracker API (see backend/CONTRACT.md in the web repo).
+/// HTTP client for the DDO Companion run-tracker API (see backend/CONTRACT.md in the web repo).
 /// Auth is the per-user API key as a bearer token. Everything is best-effort — any failure returns
 /// false and the run stays in the local outbox to retry; a sync outage must never disrupt tracking.
 /// </summary>

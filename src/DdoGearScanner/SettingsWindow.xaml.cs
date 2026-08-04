@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows;
-using System.Windows.Controls;
 using DdoGearScanner.Vision;
 
 namespace DdoGearScanner;
@@ -18,24 +17,41 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         WindowChrome.UseDarkTitleBar(this);
         DataContext = AppSettings.Instance;
-        Loaded += (_, _) => UpdateSyncKeyId();
+        Loaded += (_, _) => RefreshSyncKeyView();
     }
 
-    private void SyncKeyBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateSyncKeyId();
+    private bool _editingSyncKey;
 
-    /// <summary>Show the key's public ID — sha256(key) truncated to 12 hex chars — the SAME id the web Account
-    /// page lists, so the user can confirm this machine is holding the key the account expects (the secret key
-    /// itself is only shown once, at generation).</summary>
-    private void UpdateSyncKeyId()
+    private void SyncChangeKey_Click(object sender, RoutedEventArgs e)
     {
-        string key = SyncKeyBox.Text?.Trim() ?? "";
-        if (key.Length == 0)
+        _editingSyncKey = true;
+        RefreshSyncKeyView();
+        SyncKeyBox.Focus();
+        SyncKeyBox.SelectAll();
+    }
+
+    private void SyncDone_Click(object sender, RoutedEventArgs e)
+    {
+        _editingSyncKey = false;
+        RefreshSyncKeyView();
+    }
+
+    /// <summary>Connected: show the key's public ID (sha256(key)[:12] — the SAME id the web Account page lists)
+    /// and hide the raw secret, since the user never needs to read it back. No key set (or "Change key"): show
+    /// the paste box instead.</summary>
+    private void RefreshSyncKeyView()
+    {
+        string key = (AppSettings.Instance.SyncApiKey ?? "").Trim();
+        bool showEntry = _editingSyncKey || key.Length == 0;
+        SyncEntryPanel.Visibility = showEntry ? Visibility.Visible : Visibility.Collapsed;
+        SyncConnectedPanel.Visibility = showEntry ? Visibility.Collapsed : Visibility.Visible;
+        SyncDoneButton.Visibility = showEntry ? Visibility.Visible : Visibility.Collapsed;
+        SyncChangeButton.Visibility = showEntry ? Visibility.Collapsed : Visibility.Visible;
+        if (!showEntry)
         {
-            SyncKeyIdText.Text = "Key ID appears here once you paste a key — it matches the Key ID on the web Account page.";
-            return;
+            string id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant()[..12];
+            SyncKeyIdText.Text = $"✓ Connected  ·  Key ID  {id}";
         }
-        string id = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant()[..12];
-        SyncKeyIdText.Text = $"Key ID  {id}  —  matches the Key ID on the web Account page.";
     }
 
     private async void Test_Click(object sender, RoutedEventArgs e)

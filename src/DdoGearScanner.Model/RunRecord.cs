@@ -39,7 +39,7 @@ public sealed record RunRecord(
     // span so elapsed continues seamlessly. A finalized/logged run is never Paused.
     bool Paused = false,
     DateTime? PausedUtc = null,
-    // Cloud-sync bookkeeping: true once this run has been pushed to the DDO Gear Planner account. Editing a
+    // Cloud-sync bookkeeping: true once this run has been pushed to the DDO Companion account. Editing a
     // run resets it to false (dirty → re-push). Not shown in the UI; persisted so the outbox survives restarts.
     bool Synced = false)
 {

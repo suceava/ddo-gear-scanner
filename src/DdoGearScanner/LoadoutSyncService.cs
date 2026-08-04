@@ -1,7 +1,7 @@
 namespace DdoGearScanner;
 
 /// <summary>
-/// Pushes EVERY character's equipped loadout to the DDO Gear Planner account — on startup, whenever gear
+/// Pushes EVERY character's equipped loadout to the DDO Companion account — on startup, whenever gear
 /// changes (debounced), and on a periodic tick. The scanner is the source of truth for equipped gear; the web
 /// planner reads it as a starting point — so this is push-only (no pull). Reads each character's saved
 /// loadout file (so all characters sync, not just the active one). Best-effort; a failed push waits for the
