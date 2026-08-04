@@ -57,7 +57,9 @@
 
                 <TextBlock Text="API key" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,4,0,0" />
                 <TextBox x:Name="SyncKeyBox" Text="{Binding SyncApiKey, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,0,0"
-                         FontFamily="Consolas" />
+                         FontFamily="Consolas" TextChanged="SyncKeyBox_TextChanged" />
+                <TextBlock x:Name="SyncKeyIdText" Foreground="{StaticResource TextMuted}" FontSize="10.5" Margin="0,3,0,0"
+                           TextWrapping="Wrap" />
                 <TextBlock Text="Stored in settings.json on this machine." Foreground="{StaticResource TextMuted}" FontSize="10.5" Margin="0,2,0,0" />
 
                 <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
