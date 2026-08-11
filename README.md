@@ -10,6 +10,11 @@ DDO has no API and no gear export — this is the missing "read my equipped gear
 handles both **named items** (the recognizable chase items) and **random / Cannith-crafted
 items** (no useful name, so every mod is extracted).
 
+It's the **capture arm of DDO Companion** (web app: `ddo.gnarlybits.com`) — a connected ingestion client.
+Sign in with your Google account (opens the browser once — no key to copy or paste) and your captured
+loadouts and tracked dungeon runs sync to the web app, where the planning and analysis live. **An account
+is required to run** — the desktop app is a capture tool for the account, not a standalone product.
+
 > Living references: [docs/TOOLTIP_FORMAT.md](docs/TOOLTIP_FORMAT.md) — how DDO tooltips are structured and
 > how we parse them (read before touching the parser). [docs/PLAN.md](docs/PLAN.md) — the build plan and
 > phased roadmap. [CLAUDE.md](CLAUDE.md) — orientation for AI/agent sessions.
@@ -36,18 +41,21 @@ and OCR infrastructure are reused from it.
 ## Steps
 
 1. Launch DDO in windowed / borderless windowed mode and **open your inventory** (paper-doll visible).
-2. Run `DdoCompanion.exe`.
+2. Run `DdoCompanion.exe`. **First launch asks you to sign in** — click *Sign in with Google*, approve in
+   the browser, and you're connected. (The app requires an account to run; sign-out/re-link is in the
+   header account menu.)
 3. **Calibrate once:** with the inventory open and no tooltip showing, click **Calibrate slots** and
    follow the on-screen prompts — hover the center of each slot it names and press the hotkey. (Saved;
    only redo if you change resolution / UI scale.)
 4. Press the hotkey (default **Insert**, rebind via **Set hotkey**) to start **Detection**, then hover
    each equipped piece. Each tooltip fills its slot in the loadout sheet; click a slot to see details.
 
-Persists to `%APPDATA%\DdoGearScanner\` (`loadout.json`, `slotmap.json`, `settings.json`). Debug crops
-go to `debug-crops\`.
+Persists to `%APPDATA%\DdoCompanion\` (`loadout-<char>.json`, `runs.json`, `characters.json`, `slotmap.json`,
+`settings.json`; the account sync key is stored **encrypted**, via Windows DPAPI). Debug crops go to `debug\`.
 
-The tool only reads pixels from the DDO window via Windows Graphics Capture. It never touches the
-game process, files, or network.
+The tool reads pixels from the DDO window via Windows Graphics Capture — it never touches the game process
+or its files. It **does** talk to your DDO Companion account over the network, to sync runs and loadouts;
+that account sync is its only network use.
 
 ---
 

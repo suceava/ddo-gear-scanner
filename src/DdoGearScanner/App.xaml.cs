@@ -115,7 +115,7 @@ public partial class App : Application
         runPipeline.SetEnabled(settings.RunTrackingEnabled);
         _coordinator.FrameArrived += runPipeline.OnFrame;
 
-        // Cloud sync: push finalized runs to the DDO Companion account when an API key is set in Settings.
+        // Cloud sync: push finalized runs to the signed-in DDO Companion account (the app requires sign-in).
         // The local runs.json stays authoritative; this is a best-effort outbox on top (see RunSyncService).
         // Character name for a run = the OCR'd avatar name, else the active gear-profile's name.
         RunSyncClient syncClient = new(
