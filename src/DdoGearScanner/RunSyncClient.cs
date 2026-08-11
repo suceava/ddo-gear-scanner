@@ -11,8 +11,13 @@ namespace DdoGearScanner;
 /// <summary>Live sync settings (API key + base URL). Null from the provider = sync disabled (no key).</summary>
 public sealed record SyncConfig(string ApiKey, string ApiBase);
 
-/// <summary>A character as returned by GET /characters (shared entity, keyed by slug(name)).</summary>
-public sealed record ServerCharacter(string CharacterKey, string Name, int? LastSeenLevel);
+/// <summary>Startup auth-gate result. NoKey = none stored; Ok = valid (200); Unauthorized = key missing/
+/// revoked (401/403); Unreachable = network/5xx (caller applies offline grace — let a known user in).</summary>
+public enum AuthStatus { NoKey, Ok, Unauthorized, Unreachable }
+
+/// <summary>The signed-in account, from GET /me — the Google identity (email/name/picture) the backend
+/// captured at login.</summary>
+public sealed record AccountInfo(string? Email, string? Name, string? AvatarUrl);
 
 /// <summary>
 /// HTTP client for the DDO Companion run-tracker API (see backend/CONTRACT.md in the web repo).
@@ -200,62 +205,46 @@ public sealed class RunSyncClient
         catch (Exception ex) { return (false, ex.Message); }
     }
 
-    /// <summary>Upsert the account's characters (POST /characters, one per character; idempotent by slug).
-    /// Returns true only if every upsert succeeded.</summary>
-    public async Task<bool> PushCharactersAsync(IReadOnlyList<(string Key, string Name)> chars, CancellationToken ct = default)
-    {
-        SyncConfig? cfg = _config();
-        if (cfg is null || cfg.ApiKey.Length == 0) return false;
-        bool allOk = true;
-        foreach ((string key, string name) in chars)
-        {
-            if (key.Length == 0) continue;
-            try
-            {
-                object body = new { characterKey = key, name };
-                using HttpRequestMessage req = Authed(HttpMethod.Post, cfg, "/characters");
-                req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-                using HttpResponseMessage resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
-                if (!resp.IsSuccessStatusCode) { Log($"char push HTTP {(int)resp.StatusCode} ({key})"); allOk = false; }
-            }
-            catch (Exception ex) { Log($"char push failed ({key}): {ex.Message}"); allOk = false; }
-        }
-        return allOk;
-    }
-
-    /// <summary>Pull the account's characters (GET /characters). Null on any failure/non-200 — the caller MUST
-    /// treat null as "don't merge", never as "the account is empty".</summary>
-    public async Task<IReadOnlyList<ServerCharacter>?> PullCharactersAsync(CancellationToken ct = default)
+    /// <summary>The signed-in account (email/name/avatar) via GET /me — for the header account button.
+    /// Null on any failure (not signed in / offline).</summary>
+    public async Task<AccountInfo?> AccountAsync(CancellationToken ct = default)
     {
         SyncConfig? cfg = _config();
         if (cfg is null || cfg.ApiKey.Length == 0) return null;
         try
         {
-            using HttpRequestMessage req = Authed(HttpMethod.Get, cfg, "/characters");
+            using HttpRequestMessage req = Authed(HttpMethod.Get, cfg, "/me");
             using HttpResponseMessage resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
-            if (!resp.IsSuccessStatusCode) { Log($"char pull HTTP {(int)resp.StatusCode}"); return null; }
-            string text = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            using JsonDocument doc = JsonDocument.Parse(text);
-            if (!doc.RootElement.TryGetProperty("characters", out JsonElement arr) || arr.ValueKind != JsonValueKind.Array)
-                return null;
-            var list = new List<ServerCharacter>(arr.GetArrayLength());
-            foreach (JsonElement e in arr.EnumerateArray())
-            {
-                string? key = Str(e, "characterKey");
-                string? name = Str(e, "name");
-                if (key is null || name is null) continue;
-                list.Add(new ServerCharacter(key, name, Int(e, "lastSeenLevel")));
-            }
-            Log($"pulled {list.Count} character(s)");
-            return list;
+            if (!resp.IsSuccessStatusCode) return null;
+            using JsonDocument doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            JsonElement r = doc.RootElement;
+            return new AccountInfo(Str(r, "email"), Str(r, "name"), Str(r, "avatarUrl"));
         }
-        catch (Exception ex) { Log($"char pull failed: {ex.GetType().Name}: {ex.Message}"); return null; }
+        catch { return null; }
+    }
+
+    /// <summary>Classify the stored credential for the startup gate (GET /me). Distinguishes a definitively
+    /// bad/absent key (block) from a transient network failure (offline grace) so a dropped connection at
+    /// launch never locks a signed-in user out.</summary>
+    public async Task<AuthStatus> CheckAuthAsync(CancellationToken ct = default)
+    {
+        SyncConfig? cfg = _config();
+        if (cfg is null || cfg.ApiKey.Length == 0) return AuthStatus.NoKey;
+        try
+        {
+            using HttpRequestMessage req = Authed(HttpMethod.Get, cfg, "/me");
+            using HttpResponseMessage resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
+            if (resp.IsSuccessStatusCode) return AuthStatus.Ok;
+            if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) return AuthStatus.Unauthorized;
+            return AuthStatus.Unreachable; // 5xx / unexpected — treat as transient
+        }
+        catch { return AuthStatus.Unreachable; } // network error / timeout / cancellation
     }
 
     /// <summary>Upsert a character's equipped loadout (POST /loadouts). Matched items carry the catalog id
     /// (slug(name)-ml&lt;ML&gt;); all slots carry the captured mods so the planner can analyze unmatched gear.
     /// Best-effort.</summary>
-    public async Task<bool> PushLoadoutAsync(string characterKey, IReadOnlyDictionary<EquipSlot, GearItem> loadout, CancellationToken ct = default)
+    public async Task<bool> PushLoadoutAsync(string characterKey, string characterName, IReadOnlyDictionary<EquipSlot, GearItem> loadout, CancellationToken ct = default)
     {
         SyncConfig? cfg = _config();
         if (cfg is null || cfg.ApiKey.Length == 0 || characterKey.Length == 0) return false;
@@ -275,7 +264,8 @@ public sealed class RunSyncClient
                     mods = item.Mods.Select(m => new { stat = m.Stat, value = m.Value, bonusType = m.BonusType, isPercent = m.IsPercent }).ToArray(),
                 };
             }
-            object body = new { characterKey, source = "scanner", slots };
+            // characterName lets the server provision the Character from the loadout (no separate char-list push).
+            object body = new { characterKey, characterName, source = "scanner", slots };
             using HttpRequestMessage req = Authed(HttpMethod.Post, cfg, "/loadouts");
             req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
             using HttpResponseMessage resp = await Http.SendAsync(req, ct).ConfigureAwait(false);

@@ -110,6 +110,39 @@ internal static class WindowChrome
         };
     }
 
+    /// <summary>Center a window over a saved PHYSICAL-pixel rect (e.g. the shell's persisted bounds) using
+    /// SetWindowPlacement — DPI- and multi-monitor-correct, and the OS clamps it onto a visible monitor so it
+    /// can never land off-screen. No-op if the rect isn't valid. Applied once the window has an hwnd and again
+    /// after first render, so a SizeToContent window is centered at its final size.</summary>
+    public static void CenterOnSavedRect(Window w, double left, double top, double width, double height)
+    {
+        if (double.IsNaN(left) || double.IsNaN(top) || double.IsNaN(width) || double.IsNaN(height)
+            || width < 100 || height < 100)
+            return;
+
+        void Apply()
+        {
+            IntPtr hwnd = new WindowInteropHelper(w).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            WINDOWPLACEMENT wp = default;
+            wp.length = Marshal.SizeOf<WINDOWPLACEMENT>();
+            if (!GetWindowPlacement(hwnd, ref wp)) return;   // current placement → this window's physical size
+            RECT cur = wp.rcNormalPosition;
+            int ww = cur.Right - cur.Left, wh = cur.Bottom - cur.Top;
+            int cx = (int)(left + width / 2), cy = (int)(top + height / 2);
+            int l = cx - ww / 2, t = cy - wh / 2;
+            wp.showCmd = SW_SHOWNORMAL;
+            wp.ptMinPosition = new POINT(-1, -1);
+            wp.ptMaxPosition = new POINT(-1, -1);
+            wp.rcNormalPosition = new RECT { Left = l, Top = t, Right = l + ww, Bottom = t + wh };
+            SetWindowPlacement(hwnd, ref wp);
+        }
+
+        if (new WindowInteropHelper(w).Handle != IntPtr.Zero) Apply();
+        else w.SourceInitialized += (_, _) => Apply();
+        w.ContentRendered += (_, _) => Apply();   // re-center at the final SizeToContent size
+    }
+
     /// <summary>Persist a window's placement continuously (on move / resize / maximize) while it's
     /// alive — done live rather than at Close because the handle/placement are gone once a window
     /// starts closing. Stores the NORMAL (un-maximized) rect so a maximized window still restores to a

@@ -22,8 +22,27 @@ public partial class App : Application
     private HotkeyTrigger? _trigger;
     private DebugDiagnosticsWindow? _diagWindow;
     private RunSyncService? _runSync;
-    private CharacterSyncService? _charSync;
     private LoadoutSyncService? _loadoutSync;
+
+    /// <summary>Startup auth gate. Returns true if the app may run: a valid stored key, OR a transient
+    /// network failure with a key already set (offline grace). Otherwise shows the login window and returns
+    /// whether the user connected. A revoked/invalid key is dropped so the user is prompted to re-link.</summary>
+    private static bool EnsureSignedIn(AppSettings settings)
+    {
+        RunSyncClient client = new(
+            () => string.IsNullOrWhiteSpace(settings.SyncApiKey)
+                ? null
+                : new SyncConfig(settings.SyncApiKey.Trim(), settings.SyncApiBase.Trim()),
+            _ => "n/a");
+
+        // Bound the startup check so an offline launch isn't stuck on the full HTTP timeout.
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(8));
+        AuthStatus status = client.CheckAuthAsync(cts.Token).GetAwaiter().GetResult();
+        if (status is AuthStatus.Ok or AuthStatus.Unreachable) return true; // signed in, or offline grace
+        if (status == AuthStatus.Unauthorized) settings.SyncApiKey = string.Empty; // stale/revoked — drop it
+
+        return new LoginWindow().ShowDialog() == true;
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -40,6 +59,13 @@ public partial class App : Application
         }
 
         AppSettings settings = AppSettings.Instance;
+
+        // Web-centric: DDO Companion is an ingestion client for your account, so it requires sign-in to run.
+        // Validate the stored key (GET /me) and, if there's no key or it's been revoked, block on the login
+        // window until the user connects. Offline grace: a transient network failure still lets a previously
+        // signed-in user in, so a dropped connection at launch never locks them out of capturing.
+        if (!EnsureSignedIn(settings)) { Shutdown(); return; }
+
         CharacterStore charStore = CharacterStore.Load();
         CaptureStore store = new();
         store.SwitchTo(charStore.ActiveId);
@@ -100,17 +126,15 @@ public partial class App : Application
                 ? run.CharacterName!
                 : charStore.Profiles.FirstOrDefault(p => p.Id == run.CharacterId)?.Name ?? "Unknown");
         _runSync = new RunSyncService(runStore, syncClient);
-        // Character LIST sync (same account, same slug identity) — pushes local characters + pulls the shared
-        // list so the scanner shows the same characters as the web app. Reuses the same API-key config.
-        _charSync = new CharacterSyncService(charStore, syncClient);
         // Push every character's equipped loadout (the web planner reads it) — on startup + on gear change.
+        // The loadout push provisions the character server-side, so the desktop keeps NO synced character
+        // list: characters are derived on the server from runs + loadouts (a web delete now stays deleted).
         _loadoutSync = new LoadoutSyncService(store, charStore, syncClient);
         settings.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(AppSettings.SyncApiKey) or nameof(AppSettings.SyncApiBase))
             {
                 _runSync?.Start();
-                _charSync?.Start();
                 _loadoutSync?.Start();
             }
         };
@@ -133,7 +157,6 @@ public partial class App : Application
         // initial state paints, then kick off a drain of anything unsynced from a previous session.
         _runSync.StatusChanged += main.Run.SetSyncStatus;
         _runSync.Start();
-        _charSync.Start();
         _loadoutSync.Start();
         main.Gear.DetectionToggleRequested += () => pipeline.ToggleSession();
         main.Gear.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
@@ -277,7 +300,6 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _runSync?.Dispose();
-        _charSync?.Dispose();
         _loadoutSync?.Dispose();
         _trigger?.Dispose();
         _coordinator?.Dispose();

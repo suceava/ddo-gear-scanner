@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using DdoGearScanner.Model;
 
@@ -62,6 +63,63 @@ public partial class ShellWindow : Window
         _charChipTimer.Tick += (_, _) => UpdateCharChip();
         _charChipTimer.Start();
         UpdateCharChip();
+
+        _ = RefreshAccountAsync();
+    }
+
+    // ---- account menu ----
+
+    private RunSyncClient NewSyncClient() => new(
+        () => string.IsNullOrWhiteSpace(_settings.SyncApiKey)
+            ? null
+            : new SyncConfig(_settings.SyncApiKey.Trim(), _settings.SyncApiBase.Trim()),
+        _ => "n/a");
+
+    private async Task RefreshAccountAsync()
+    {
+        AccountInfo? acc = await NewSyncClient().AccountAsync();
+        string? who = acc?.Email ?? acc?.Name;
+        AccountLabel.Text = string.IsNullOrWhiteSpace(who) ? "Account" : ShortName(who!);
+        AccountEmail.Text = string.IsNullOrWhiteSpace(who) ? "Signed in" : $"Signed in as {who}";
+        AccountInitial.Text = string.IsNullOrWhiteSpace(who) ? "" : who!.Trim()[..1].ToUpperInvariant();
+        AccountAvatar.Fill = (Brush)FindResource("BgInput"); // initial-circle fallback until the picture loads
+        if (!string.IsNullOrWhiteSpace(acc?.AvatarUrl)) TryLoadAvatar(acc!.AvatarUrl!);
+    }
+
+    // Load the Google profile picture into the avatar circle; keep the initial fallback if it fails.
+    private void TryLoadAvatar(string url)
+    {
+        try
+        {
+            BitmapImage bmp = new();
+            bmp.BeginInit();
+            bmp.UriSource = new Uri(url);
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.EndInit();
+            void Apply() { AccountAvatar.Fill = new ImageBrush(bmp) { Stretch = Stretch.UniformToFill }; AccountInitial.Text = ""; }
+            if (bmp.IsDownloading) bmp.DownloadCompleted += (_, _) => Apply();
+            else Apply();
+        }
+        catch { /* keep the initial-circle fallback */ }
+    }
+
+    // Header shows the local part of the email (or the full name); the dropdown shows the full identity.
+    private static string ShortName(string who)
+    {
+        int at = who.IndexOf('@');
+        return at > 0 ? who[..at] : who;
+    }
+
+    private void Account_Click(object sender, RoutedEventArgs e) => AccountPopup.IsOpen = true;
+
+    private void SignOut_Click(object sender, RoutedEventArgs e)
+    {
+        AccountPopup.IsOpen = false;
+        _settings.SyncApiKey = string.Empty; // disconnect — clears the stored (encrypted) key
+        // Web-centric: the app requires sign-in to run, so re-gate immediately. Re-sign-in continues; Quit exits.
+        LoginWindow login = new() { Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        if (login.ShowDialog() == true) _ = RefreshAccountAsync();
+        else Application.Current.Shutdown();
     }
 
     // ---- header character chip ----

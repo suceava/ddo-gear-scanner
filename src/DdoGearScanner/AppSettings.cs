@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -112,15 +114,52 @@ public sealed class AppSettings : INotifyPropertyChanged
     public string OpenRouterModel { get => _openRouterModel; set => Set(ref _openRouterModel, value); }
 
     // ---- Cloud sync (DDO Companion account) ----
-    // Per-user API key minted at ddo.gnarlybits.com → Account, pasted here. When set, finalized runs are
-    // pushed to the account (name-scoped to that user). Empty = sync off (runs stay local). Stored plaintext
-    // by explicit user choice, like the OpenRouter key.
+    // Per-user API key for the account. Provisioned automatically by "Sign in with Google" (the web-brokered
+    // device link) or pasted manually. When set, runs/loadouts are pushed to the account. Held in memory
+    // (bound to the Advanced paste box + read by the sync client) but PERSISTED ENCRYPTED via Windows DPAPI
+    // (see SyncApiKeyProtected) — it's auto-provisioned now, so plaintext-on-disk is no longer acceptable.
     private string _syncApiKey = string.Empty;
-    public string SyncApiKey { get => _syncApiKey; set => Set(ref _syncApiKey, value); }
+    [JsonIgnore]
+    public string SyncApiKey
+    {
+        get => _syncApiKey;
+        set
+        {
+            if (_syncApiKey == value) return;
+            _syncApiKey = value;
+            _syncApiKeyProtected = Protect(value);
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SyncApiKey)));
+            if (!_suppressSave) Save();
+        }
+    }
+
+    // The DPAPI-encrypted (base64) form of SyncApiKey — this is what's written to settings.json. Not bound;
+    // kept in sync by the SyncApiKey setter and decrypted back on load. CurrentUser scope: only this Windows
+    // account on this machine can read it.
+    private string? _syncApiKeyProtected;
+    public string? SyncApiKeyProtected { get => _syncApiKeyProtected; set => _syncApiKeyProtected = value; }
 
     // Base URL of the run-tracker API. Overridable without a rebuild (dev/staging); default is prod.
     private string _syncApiBase = "https://ddo-api.gnarlybits.com";
     public string SyncApiBase { get => _syncApiBase; set => Set(ref _syncApiBase, value); }
+
+    // Base URL of the web app (hosts /link-desktop for "Sign in with Google"). Separate from the API host.
+    private string _syncWebBase = "https://ddo.gnarlybits.com";
+    public string SyncWebBase { get => _syncWebBase; set => Set(ref _syncWebBase, value); }
+
+    private static string? Protect(string? plain)
+    {
+        if (string.IsNullOrEmpty(plain)) return null;
+        try { return Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(plain), null, DataProtectionScope.CurrentUser)); }
+        catch { return null; }
+    }
+
+    private static string? Unprotect(string? blob)
+    {
+        if (string.IsNullOrEmpty(blob)) return null;
+        try { return Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(blob), null, DataProtectionScope.CurrentUser)); }
+        catch { return null; }
+    }
 
     // Stacking-matrix window bounds (NaN => center on first open).
     private double _matrixLeft = double.NaN;
@@ -218,11 +257,13 @@ public sealed class AppSettings : INotifyPropertyChanged
     private static AppSettings Load()
     {
         AppSettings s = new() { _suppressSave = true };
+        bool migratedSyncKey = false;
         try
         {
             if (File.Exists(SettingsPath))
             {
-                AppSettings? loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath), JsonOpts);
+                string rawJson = File.ReadAllText(SettingsPath);
+                AppSettings? loaded = JsonSerializer.Deserialize<AppSettings>(rawJson, JsonOpts);
                 if (loaded is not null)
                 {
                     s.HotkeyModifiers = loaded.HotkeyModifiers;
@@ -240,8 +281,23 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.LlmEnabled = loaded.LlmEnabled;
                     s.OpenRouterApiKey = loaded.OpenRouterApiKey ?? string.Empty;
                     s.OpenRouterModel = string.IsNullOrWhiteSpace(loaded.OpenRouterModel) ? s.OpenRouterModel : loaded.OpenRouterModel;
-                    s.SyncApiKey = loaded.SyncApiKey ?? string.Empty;
+                    // Sync key: prefer the encrypted blob; fall back to (and migrate) any legacy plaintext.
+                    s._syncApiKeyProtected = loaded.SyncApiKeyProtected;
+                    string? syncKey = Unprotect(loaded.SyncApiKeyProtected);
+                    if (string.IsNullOrEmpty(syncKey))
+                    {
+                        try
+                        {
+                            using JsonDocument doc = JsonDocument.Parse(rawJson);
+                            if (doc.RootElement.TryGetProperty(nameof(SyncApiKey), out JsonElement v) && v.ValueKind == JsonValueKind.String)
+                                syncKey = v.GetString();
+                        }
+                        catch { /* no legacy plaintext */ }
+                        if (!string.IsNullOrEmpty(syncKey)) { s._syncApiKeyProtected = Protect(syncKey); migratedSyncKey = true; }
+                    }
+                    s._syncApiKey = syncKey ?? string.Empty; // set backing field directly (no re-encrypt/notify during load)
                     s.SyncApiBase = string.IsNullOrWhiteSpace(loaded.SyncApiBase) ? s.SyncApiBase : loaded.SyncApiBase;
+                    s.SyncWebBase = string.IsNullOrWhiteSpace(loaded.SyncWebBase) ? s.SyncWebBase : loaded.SyncWebBase;
                     s.MatrixLeft = loaded.MatrixLeft;
                     s.MatrixTop = loaded.MatrixTop;
                     s.MatrixWidth = loaded.MatrixWidth;
@@ -282,6 +338,8 @@ public sealed class AppSettings : INotifyPropertyChanged
         }
         catch { /* defaults on any parse failure */ }
         s._suppressSave = false;
+        // A migrated legacy plaintext key: rewrite settings.json now so the encrypted blob replaces it.
+        if (migratedSyncKey) s.Save();
         return s;
     }
 

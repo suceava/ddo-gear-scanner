@@ -195,25 +195,6 @@ public sealed class CharacterStore
         return ActiveId;
     }
 
-    /// <summary>Merge the account's characters (from GET /characters) into the local list: any not present by
-    /// slug are added (as Unknown playstyle; level seeded from the server's last-seen). Existing local profiles
-    /// (with their playstyle/classes/loadout) are left untouched.</summary>
-    public void MergeFromServer(IReadOnlyList<ServerCharacter> server)
-    {
-        bool added = false;
-        foreach (ServerCharacter sc in server)
-        {
-            if (sc.CharacterKey.Length == 0 || _profiles.Any(p => p.Id == sc.CharacterKey)) continue;
-            _profiles.Add(new CharacterProfile(sc.CharacterKey, sc.Name, Playstyle.Unknown, null, sc.LastSeenLevel));
-            added = true;
-        }
-        if (added)
-        {
-            Save();
-            Changed?.Invoke();
-        }
-    }
-
     public void Save()
     {
         try

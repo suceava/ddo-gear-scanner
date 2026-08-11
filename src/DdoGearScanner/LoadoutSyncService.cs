@@ -5,7 +5,7 @@ namespace DdoGearScanner;
 /// changes (debounced), and on a periodic tick. The scanner is the source of truth for equipped gear; the web
 /// planner reads it as a starting point — so this is push-only (no pull). Reads each character's saved
 /// loadout file (so all characters sync, not just the active one). Best-effort; a failed push waits for the
-/// next trigger. Mirrors RunSyncService/CharacterSyncService.
+/// next trigger. Mirrors RunSyncService.
 /// </summary>
 public sealed class LoadoutSyncService : IDisposable
 {
@@ -52,7 +52,9 @@ public sealed class LoadoutSyncService : IDisposable
                     // the rest. Both are keyed by slug (p.Id).
                     var loadout = p.Id == _store.CharacterId ? _store.Loadout : CaptureStore.ReadLoadout(p.Id);
                     if (loadout.Count == 0) continue;
-                    await _client.PushLoadoutAsync(p.Id, loadout).ConfigureAwait(false);
+                    // Pass the name so the server can provision the Character from the loadout (the desktop no
+                    // longer pushes a separate character list).
+                    await _client.PushLoadoutAsync(p.Id, p.Name, loadout).ConfigureAwait(false);
                 }
             } while (_again);
         }
