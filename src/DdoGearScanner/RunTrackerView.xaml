@@ -90,7 +90,7 @@
                     <Border x:Name="LeftBanner" Visibility="Collapsed" Margin="0,12,0,0" Padding="14,10"
                             CornerRadius="8" Background="#3A2E10" BorderBrush="#E8B34A" BorderThickness="1">
                         <StackPanel>
-                            <TextBlock Text="Looks like you left the dungeon — what should this run do?"
+                            <TextBlock Text="Looks like you left the quest — what should this run do?"
                                        Foreground="{StaticResource ParchStrong}" FontSize="13" FontWeight="SemiBold" />
                             <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
                                 <Button x:Name="BannerPause" Content="⏸ Pause" Click="BannerPause_Click" Margin="0,0,8,0" />
@@ -135,7 +135,7 @@
                   BorderBrush="{StaticResource BorderDim}" BorderThickness="1" SelectionMode="Single"
                   ColumnWidth="Auto" RowHeight="30">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Dungeon" Binding="{Binding Dungeon}" Width="*" MinWidth="120">
+                <DataGridTextColumn Header="Quest" Binding="{Binding Dungeon}" Width="*" MinWidth="120">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
                             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
