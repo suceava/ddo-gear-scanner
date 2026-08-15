@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading.Tasks;
 using DdoGearScanner.Model;
 using DdoGearScanner.Vision;
 using OpenCvSharp;
@@ -16,7 +17,7 @@ public class EndToEndCropDiagnostic
     public EndToEndCropDiagnostic(ITestOutputHelper output) => _out = output;
 
     [Fact]
-    public void ReparseAllSavedCrops()
+    public async Task ReparseAllSavedCrops()
     {
         string dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -29,7 +30,7 @@ public class EndToEndCropDiagnostic
         foreach (string crop in Directory.GetFiles(dir, "crop-*.png").OrderBy(f => f))
         {
             using Mat mat = Cv2.ImRead(crop, ImreadModes.Color);
-            GearItem? item = reader.ReadAsync(mat).GetAwaiter().GetResult().Item;
+            GearItem? item = (await reader.ReadAsync(mat)).Item;
             _out.WriteLine($"### {Path.GetFileName(crop)}  ::  {item?.Name}");
             foreach (Mod m in item?.Mods ?? new List<Mod>())
             {
@@ -42,7 +43,7 @@ public class EndToEndCropDiagnostic
     }
 
     [Fact]
-    public void ParseCrop()
+    public async Task ParseCrop()
     {
         string dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -55,7 +56,7 @@ public class EndToEndCropDiagnostic
         var reader = new LocalOcrTooltipReader(ocr);
 
         using Mat mat = Cv2.ImRead(crop, ImreadModes.Color);
-        TooltipReadResult result = reader.ReadAsync(mat, dir, "_e2e").GetAwaiter().GetResult();
+        TooltipReadResult result = await reader.ReadAsync(mat, dir, "_e2e");
         _out.WriteLine($"wrote bundle: {Path.Combine(dir, "_e2e-detect.png")} + _e2e-report.txt");
         GearItem? item = result.Item;
         if (item is null) { _out.WriteLine("null item"); return; }
