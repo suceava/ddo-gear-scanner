@@ -36,6 +36,16 @@ public class RunTextParserTests
         Assert.Equal(0, RunTextParser.ExtractChatXp(new[] { "You receive 500 XP", "You receive 0 XP" })); // quest total is last
         Assert.Null(RunTextParser.ExtractChatXp(new[] { "You slay the goblin", "Adventure Completed" }));
     }
+
+    [Theory]
+    [InlineData("You receive O XP", 0)]               // OCR misread the lone 0 as the letter O
+    [InlineData("You receive OO experience points", 0)]
+    public void ExtractChatXpTreatsALoneOMisreadAsZero(string line, int expected)
+        => Assert.Equal(expected, RunTextParser.ExtractChatXp(new[] { line }));
+
+    [Fact]
+    public void ExtractChatXpDoesNotZeroMatchAWordBeforeXp()               // "nothing" must NOT read as 0 XP
+        => Assert.Null(RunTextParser.ExtractChatXp(new[] { "You receive nothing of value" }));
 }
 
 public class QuestWikiTests

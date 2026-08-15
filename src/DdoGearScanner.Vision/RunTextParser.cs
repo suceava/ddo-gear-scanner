@@ -158,6 +158,11 @@ public static class RunTextParser
             Match m = Regex.Match(line, @"receive[^\d]{0,15}([\d,]+)\s*(?:xp|experience)", RegexOptions.IgnoreCase);
             if (m.Success && int.TryParse(m.Groups[1].Value.Replace(",", ""), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v))
                 xp = v;
+            // OCR reads a lone zero as the letter O ("You receive O XP"), so the digit pattern finds nothing and a
+            // real 0-XP award (talk-to-NPC quests) looks like "unread". A short run of O/o sitting directly before
+            // xp/experience is that misread 0 — anchored to xp so it can't false-match a word like "Nothing".
+            else if (Regex.IsMatch(line, @"receive[^\dOo]{0,15}[Oo]{1,3}\s*(?:xp|experience)", RegexOptions.IgnoreCase))
+                xp = 0;
         }
         return xp;
     }

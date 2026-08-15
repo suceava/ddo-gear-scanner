@@ -230,10 +230,12 @@ carries forward across jittery frames and can show a stale value for a second be
 **Difficulty** buttons on the card are the backstop. Tuned from `debug\run\popup.png` + the `[difficulty=…]
 [white: …]` log line (crop ↔ log verified against the actually-highlighted tier).
 
-**Still on the design-goal list, NOT yet built:**
-- **End-of-quest reward panel** (optional nicety) — DDO's center-screen XP summary would give name +
-  difficulty + full XP in one panel; completion works fine via tracker "Completed" + chat XP, so it's not
-  required. Stale "reward panel" comments in `App`/`AppSettings`/`RunTrackerPipeline`/`RunRecord` are historical.
+**Ruled OUT — do NOT propose the end-of-quest reward panel as an XP source.** It is NOT automatic (the player
+has to click the quest's XP button to open it) and NOT readable in one shot (a small window with scrollable
+text). So it can't be a passive, reliable XP read. XP stays chat-sourced ("You receive N XP"); improve THAT
+(bigger/re-placed chat region, capture during the completed-card linger, better 0-handling) rather than reaching
+for the reward panel. Stale "reward panel" comments in `App`/`AppSettings`/`RunTrackerPipeline`/`RunRecord` are
+historical dead ends.
 
 ## Where things live
 
