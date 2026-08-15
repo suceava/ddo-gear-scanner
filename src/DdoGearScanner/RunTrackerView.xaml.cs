@@ -89,12 +89,33 @@ public partial class RunTrackerView : UserControl
             _rows.Add(new RunRow(r, Persist));
         if (selectedId is not null)
             Grid.SelectedItem = _rows.FirstOrDefault(r => r.Record.Id == selectedId);
+        UpdateXpWarnQueue();
     }
 
     private void OnRunFinalized(RunRecord run) => Dispatcher.BeginInvoke(() =>
     {
         _rows.Insert(0, new RunRow(run, Persist));
+        UpdateXpWarnQueue();
     });
+
+    // The review queue: completed runs whose XP never got read (OCR miss). Shown as a clickable badge in the
+    // control bar so the miss can't slip by silently; hidden when empty.
+    private void UpdateXpWarnQueue()
+    {
+        int n = _rows.Count(r => r.XpMissing);
+        XpWarnBadge.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+        XpWarnText.Text = n == 1 ? "⚠ 1 run missing XP" : $"⚠ {n} runs missing XP";
+    }
+
+    // Jump to the newest run that's missing XP (rows are newest-first) so it can be selected + edited.
+    private void XpWarn_Click(object sender, MouseButtonEventArgs e)
+    {
+        RunRow? row = _rows.FirstOrDefault(r => r.XpMissing);
+        if (row is null) return;
+        Grid.SelectedItem = row;
+        Grid.ScrollIntoView(row);
+        Grid.Focus();
+    }
 
     private string? _autoOpenedRunId;
     private void OnCurrentChanged(RunRecord? current) => Dispatcher.BeginInvoke(() =>
@@ -148,9 +169,14 @@ public partial class RunTrackerView : UserControl
             string? who = WhoChip((c.CharacterName, c.CharacterLevel));
             var chips = new (string, string?)[] { ("Character", who), ("Difficulty", c.Difficulty), ("Quest Lvl", c.QuestLevel?.ToString()), ("XP", c.Xp?.ToString("N0")) };
             SetActionButtons(start: false, complete: !done, cancel: !done, wiki: !string.IsNullOrWhiteSpace(c.DungeonName), pause: !done, paused: paused);
-            string badge = done ? "COMPLETED" : paused ? "PAUSED" : "IN PROGRESS";
-            Brush accent = done ? CompletedAccent : paused ? PausedAccent : GoldBright;
-            SetCard(name, badge, accent, null, Fmt(elapsed), chips);
+            // Completed but XP never read — the time-sensitive OCR miss. Flag it hard on the card so the user
+            // can check chat + Edit before the "You receive N XP" line scrolls away.
+            bool warnXp = c.XpMissing;
+            string badge = done ? (warnXp ? "CHECK XP" : "COMPLETED") : paused ? "PAUSED" : "IN PROGRESS";
+            Brush accent = warnXp ? WarnAccent : done ? CompletedAccent : paused ? PausedAccent : GoldBright;
+            string? hint = warnXp ? "XP wasn't captured — check the chat log for \"You receive N XP\" and press ✎ Edit." : null;
+            SetCard(name, badge, accent, hint, Fmt(elapsed), chips);
+            if (warnXp) CurrentHint.Foreground = WarnAccent;
             return;
         }
         if (_heldEntry is { } e)
@@ -191,7 +217,14 @@ public partial class RunTrackerView : UserControl
     {
         if (_current is null) return;
         var dlg = new RunEditWindow(_current) { Owner = Window.GetWindow(this) };
-        if (dlg.ShowDialog() == true && dlg.Result is not null) _pipeline.UpdateCurrent(dlg.Result);
+        if (dlg.ShowDialog() == true && dlg.Result is not null)
+        {
+            _pipeline.UpdateCurrent(dlg.Result);
+            // Keep the matching history row + the queue in sync (a completed run is in both _current and _rows),
+            // so filling XP from the card clears the ⚠ everywhere at once.
+            _rows.FirstOrDefault(r => r.Record.Id == dlg.Result.Id)?.Replace(dlg.Result);
+            UpdateXpWarnQueue();
+        }
     }
 
     private static void OpenWiki(string? questName)
@@ -217,6 +250,7 @@ public partial class RunTrackerView : UserControl
         }
 
         CurrentHint.Text = hint ?? "";
+        CurrentHint.Foreground = TextMuted;   // default; the XP-miss branch overrides to WarnAccent after this
         CurrentHint.Visibility = string.IsNullOrWhiteSpace(hint) ? Visibility.Collapsed : Visibility.Visible;
         CurrentTimer.Text = timer;
         CurrentCard.BorderBrush = badgeColor ?? Res("BorderGold");
@@ -243,6 +277,7 @@ public partial class RunTrackerView : UserControl
 
     private static readonly Brush CompletedAccent = Freeze(0x8F, 0xCF, 0x8A);   // natural green
     private static readonly Brush PausedAccent = Freeze(0xE8, 0xB3, 0x4A);      // amber
+    private static readonly Brush WarnAccent = Freeze(0xE8, 0x7A, 0x3A);        // completed but XP not read
     private static Brush Freeze(byte r, byte g, byte b)
     {
         var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
@@ -282,6 +317,7 @@ public partial class RunTrackerView : UserControl
         {
             _store.Update(dlg.Result);   // marks Synced=false → re-pushes to the account
             row.Replace(dlg.Result);
+            UpdateXpWarnQueue();
         }
     }
 
@@ -293,6 +329,7 @@ public partial class RunTrackerView : UserControl
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         _store.Remove(row.Record.Id);
         _rows.Remove(row);
+        UpdateXpWarnQueue();
     }
 
     private void CalibrateRun_Click(object sender, RoutedEventArgs e) => RunCalibrateRequested?.Invoke();
@@ -358,6 +395,7 @@ public sealed class RunRow : INotifyPropertyChanged
             Record = Record with { Xp = xp, Edited = true };
             Commit(nameof(XpText));
             Raise(nameof(XpPerMinute));
+            Raise(nameof(XpMissing));
         }
     }
 
@@ -398,13 +436,15 @@ public sealed class RunRow : INotifyPropertyChanged
 
     public bool Completed => Record.Completed;
     public string Status => Record.Completed ? "Completed" : "Left";
+    /// <summary>Completed run whose XP never got read — drives the ⚠ table flag + the review queue.</summary>
+    public bool XpMissing => Record.XpMissing;
 
     /// <summary>Replace the whole record (from the full run editor) and refresh every displayed field.</summary>
     public void Replace(RunRecord r)
     {
         Record = r;
         foreach (string p in new[] { nameof(Dungeon), nameof(Character), nameof(Difficulty), nameof(XpText),
-            nameof(CharLevelText), nameof(LevelText), nameof(Entered), nameof(Duration), nameof(XpPerMinute), nameof(Completed), nameof(Status) })
+            nameof(CharLevelText), nameof(LevelText), nameof(Entered), nameof(Duration), nameof(XpPerMinute), nameof(Completed), nameof(Status), nameof(XpMissing) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
     }
 

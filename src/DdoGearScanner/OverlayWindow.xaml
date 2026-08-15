@@ -63,5 +63,29 @@
                        Foreground="White"
                        Text="" />
         </Border>
+        <!-- Mini run readout, pinned to the game's bottom-right: one row, shown only WHILE a run is in progress
+             (and briefly after completion so the XP isn't missed). Click-through like the rest of the overlay. -->
+        <Border x:Name="RunHudBorder"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="0,0,20,20"
+                Background="#E0101418"
+                BorderBrush="#FFE0A030"
+                BorderThickness="1.5"
+                CornerRadius="6"
+                Padding="12,7"
+                Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+                <Ellipse x:Name="RunHudDot" Width="9" Height="9" Margin="0,0,8,0" VerticalAlignment="Center" Fill="#FF35C26B" />
+                <TextBlock x:Name="RunHudName" FontFamily="Segoe UI" FontSize="14" FontWeight="SemiBold"
+                           Foreground="White" VerticalAlignment="Center" MaxWidth="300" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="RunHudDiff" FontFamily="Segoe UI" FontSize="12" Foreground="#FFB9A97A"
+                           VerticalAlignment="Center" Margin="7,0,0,0" />
+                <TextBlock x:Name="RunHudTimer" FontFamily="Consolas" FontSize="15" FontWeight="Bold"
+                           Foreground="#FFE6C66A" VerticalAlignment="Center" Margin="12,0,0,0" />
+                <TextBlock x:Name="RunHudXp" FontFamily="Segoe UI" FontSize="14" FontWeight="Bold"
+                           Foreground="#FF8FCF8A" VerticalAlignment="Center" Margin="12,0,0,0" Visibility="Collapsed" />
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

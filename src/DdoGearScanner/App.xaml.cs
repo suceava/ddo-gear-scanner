@@ -149,6 +149,10 @@ public partial class App : Application
         OverlayWindow overlay = new();
         overlay.Show();
         overlay.AttachTracker(_tracker);
+        // Mini in-game run readout (bottom-right): timer while running, XP at completion. Pick up a run already
+        // restored on startup, then follow the live signal.
+        runPipeline.CurrentChanged += overlay.SetCurrentRun;
+        overlay.SetCurrentRun(runPipeline.Current);
 
         // The "DDO Companion" shell hosts the Loadout + Runs pages; App routes the
         // gear/run pipeline events to the embedded views via main.Gear / main.Run.

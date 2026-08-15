@@ -50,6 +50,14 @@
                 <TextBlock x:Name="SyncStatusText" DockPanel.Dock="Left" VerticalAlignment="Center"
                            FontSize="12.5" Foreground="{StaticResource TextMuted}" Text="☁ Sync off"
                            ToolTip="Add your DDO Companion key in Settings to sync runs" />
+                <!-- Review queue: completed runs whose XP never got read (OCR miss). Click to jump to the newest
+                     so it can be edited. Hidden when the queue is empty. -->
+                <Border x:Name="XpWarnBadge" DockPanel.Dock="Left" Visibility="Collapsed" Margin="16,0,0,0"
+                        Background="#3A2410" BorderBrush="#E87A3A" BorderThickness="1" CornerRadius="9"
+                        Padding="10,3" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="XpWarn_Click"
+                        ToolTip="Completed runs whose XP wasn't captured — click to jump to the newest, then ✎ Edit it">
+                    <TextBlock x:Name="XpWarnText" Foreground="#F0C89A" FontSize="12.5" FontWeight="SemiBold" />
+                </Border>
             </DockPanel>
         </Border>
 
@@ -146,7 +154,28 @@
                 <DataGridTextColumn Header="Char Lvl" Binding="{Binding CharLevelText}" Width="62" />
                 <DataGridTextColumn Header="Difficulty" Binding="{Binding Difficulty}" Width="82" />
                 <DataGridTextColumn Header="Lvl" Binding="{Binding LevelText}" Width="46" />
-                <DataGridTextColumn Header="XP" Binding="{Binding XpText}" Width="72" />
+                <DataGridTemplateColumn Header="XP" Width="86">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="{Binding XpText}" />
+                                        <Style.Triggers>
+                                            <!-- Completed but XP unread → flag it right in the table so the queue is visible at a glance. -->
+                                            <DataTrigger Binding="{Binding XpMissing}" Value="True">
+                                                <Setter Property="Text" Value="⚠ missing" />
+                                                <Setter Property="Foreground" Value="#E87A3A" />
+                                                <Setter Property="FontWeight" Value="SemiBold" />
+                                                <Setter Property="ToolTip" Value="XP wasn't captured — select the run and ✎ Edit to add it from the chat log" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="XP/min" Binding="{Binding XpPerMinute}" IsReadOnly="True" Width="64" />
                 <DataGridTextColumn Header="Time" Binding="{Binding Duration}" IsReadOnly="True" Width="62" />
                 <DataGridTextColumn Header="Entered" Binding="{Binding Entered}" IsReadOnly="True" Width="96" />

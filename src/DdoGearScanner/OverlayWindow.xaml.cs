@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using DdoGearScanner.Capture;
+using DdoGearScanner.Model;
 
 namespace DdoGearScanner;
 
@@ -25,6 +26,14 @@ public partial class OverlayWindow : Window
 
     private readonly DispatcherTimer _toastTimer;
     private readonly DispatcherTimer _highlightTimer;
+    private readonly DispatcherTimer _runHudTimer;
+
+    // Mini run readout state: the run currently shown, and (after completion) how long to keep it up so the XP
+    // — which only lands at completion — is seen before the row hides.
+    private RunRecord? _hudRun;
+    private DateTime? _hudLingerUntil;
+    private const double HudLingerSeconds = 15;
+    private const double HudWarnLingerSeconds = 30; // XP-miss is a call to action — keep it up longer
 
     public OverlayWindow()
     {
@@ -33,6 +42,10 @@ public partial class OverlayWindow : Window
         _toastTimer.Tick += (_, _) => { _toastTimer.Stop(); ToastBorder.Visibility = Visibility.Collapsed; };
         _highlightTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.0) };
         _highlightTimer.Tick += (_, _) => { _highlightTimer.Stop(); RegionHighlight.Visibility = Visibility.Collapsed; };
+        // Ticks the live timer (and expires the post-completion linger) for the mini run readout.
+        _runHudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.0) };
+        _runHudTimer.Tick += (_, _) => RefreshRunHud();
+        _runHudTimer.Start();
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -210,5 +223,81 @@ public partial class OverlayWindow : Window
             _toastTimer.Stop();
             if (!sticky) _toastTimer.Start();
         });
+    }
+
+    // ---- mini run readout (bottom-right): timer while running, XP at completion ----
+
+    /// <summary>Feed the mini run readout from the run tracker's <c>CurrentChanged</c>. Shows a one-row HUD in
+    /// the game's bottom-right WHILE a run is in progress; on completion it swaps to ✓ + XP and lingers a few
+    /// seconds (the XP only lands at completion) before hiding. A null clears it — unless a just-completed run
+    /// is still inside its linger window.</summary>
+    public void SetCurrentRun(RunRecord? run) => Dispatcher.Invoke(() =>
+    {
+        if (run is { Completed: true })
+        {
+            _hudRun = run;
+            _hudLingerUntil = DateTime.UtcNow.AddSeconds(run.XpMissing ? HudWarnLingerSeconds : HudLingerSeconds);
+        }
+        else if (run is not null) // in progress / paused
+        {
+            _hudRun = run;
+            _hudLingerUntil = null;
+        }
+        else if (_hudLingerUntil is null) // cleared, and not mid-linger on a completed run
+        {
+            _hudRun = null;
+        }
+        RefreshRunHud();
+    });
+
+    private void RefreshRunHud()
+    {
+        // Drop a completed run once its linger elapses.
+        if (_hudLingerUntil is { } until && DateTime.UtcNow >= until)
+        {
+            _hudLingerUntil = null;
+            if (_hudRun is { Completed: true }) _hudRun = null;
+        }
+        if (_hudRun is not { } r)
+        {
+            RunHudBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+        bool done = r.Completed, paused = r.Paused;
+        bool warn = r.XpMissing; // completed but XP never read — the time-sensitive miss (chat scrolls away)
+        RunHudDot.Fill = warn ? HudWarn : done ? HudGreen : paused ? HudAmber : HudLive;
+        RunHudBorder.BorderBrush = warn ? HudWarn : done ? HudGreen : paused ? HudAmber : HudGold;
+        RunHudName.Text = string.IsNullOrWhiteSpace(r.DungeonName) ? "(unnamed quest)" : r.DungeonName;
+        RunHudDiff.Text = string.IsNullOrWhiteSpace(r.Difficulty) ? (paused ? "· paused" : "") : "· " + r.Difficulty + (paused ? " · paused" : "");
+        RunHudTimer.Text = FmtElapsed(r.Elapsed(DateTime.UtcNow));
+        if (warn)
+        {
+            RunHudXp.Text = "⚠ XP not read — check chat";
+            RunHudXp.Foreground = HudWarn;
+            RunHudXp.Visibility = Visibility.Visible;
+        }
+        else if (done && r.Xp is { } xp)
+        {
+            RunHudXp.Text = $"+{xp:N0} XP";
+            RunHudXp.Foreground = HudGreen;
+            RunHudXp.Visibility = Visibility.Visible;
+        }
+        else RunHudXp.Visibility = Visibility.Collapsed;
+        RunHudBorder.Visibility = Visibility.Visible;
+    }
+
+    private static string FmtElapsed(TimeSpan t)
+        => t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
+
+    private static readonly Brush HudGreen = FrozenBrush(0x8F, 0xCF, 0x8A);  // completed
+    private static readonly Brush HudAmber = FrozenBrush(0xE8, 0xB3, 0x4A);  // paused
+    private static readonly Brush HudGold = FrozenBrush(0xE0, 0xA0, 0x30);   // in-progress border
+    private static readonly Brush HudLive = FrozenBrush(0x35, 0xC2, 0x6B);   // in-progress dot
+    private static readonly Brush HudWarn = FrozenBrush(0xE8, 0x7A, 0x3A);   // completed but XP not read
+    private static Brush FrozenBrush(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
     }
 }

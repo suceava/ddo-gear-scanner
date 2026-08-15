@@ -56,6 +56,11 @@ public sealed record RunRecord(
         ? xp / d.TotalMinutes
         : null;
 
+    /// <summary>A completed run whose XP never got read (OCR miss) — the one field that's time-sensitive to fix
+    /// (the chat "You receive N XP" line scrolls away), so it's flagged for a warning + a review queue. A
+    /// left/abandoned run legitimately has no XP and is NOT flagged.</summary>
+    public bool XpMissing => Completed && Xp is null;
+
     /// <summary>Short opaque id for identifying a run across edits/sorting in the UI.</summary>
     public static string NewId() => Guid.NewGuid().ToString("N")[..8];
 }
