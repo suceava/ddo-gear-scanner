@@ -118,6 +118,12 @@ public partial class RunTrackerView : UserControl
     }
 
     private string? _autoOpenedRunId;
+
+    /// <summary>Mark a run as already having had its wiki opened, so auto-open won't fire for it. Used on startup
+    /// for a RESTORED in-progress run — its wiki was opened when it originally started, and a restore is not a
+    /// start, so restarting the app mid-quest must not reopen the page.</summary>
+    public void MarkWikiHandled(string runId) => _autoOpenedRunId = runId;
+
     private void OnCurrentChanged(RunRecord? current) => Dispatcher.BeginInvoke(() =>
     {
         _current = current;

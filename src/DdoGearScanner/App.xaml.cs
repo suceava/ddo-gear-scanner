@@ -241,7 +241,12 @@ public partial class App : Application
         // Restore an in-progress run lost to a crash/restart mid-quest (the Run view is now subscribed, so
         // its card updates). Dropped if it started too long ago to still be real.
         if (ActiveRunStore.Load(TimeSpan.FromHours(8)) is { } activeRun)
+        {
+            // A restore is NOT a start — the wiki was already opened when this run first began, so don't let
+            // AutoOpenWiki reopen it on every restart. Mark it handled before the restore fires CurrentChanged.
+            main.Run.MarkWikiHandled(activeRun.Id);
             runPipeline.RestoreActiveRun(activeRun);
+        }
 
         if (slotMap.IsDefault && reader.IsAvailable)
             main.Gear.SetStatusText("Using the built-in 2560×1440 slot calibration. If slots don't detect, recalibrate via ☰ Menu → Calibrate Slots.");

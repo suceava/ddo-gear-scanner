@@ -93,6 +93,11 @@ public sealed class AppSettings : INotifyPropertyChanged
     private bool _autoOpenWiki;
     public bool AutoOpenWiki { get => _autoOpenWiki; set => Set(ref _autoOpenWiki, value); }
 
+    // Run tracker: show the mini in-game run readout (bottom-right overlay) — live timer while a quest runs, XP
+    // at completion. On by default; only visible while a run is active.
+    private bool _showRunHud = true;
+    public bool ShowRunHud { get => _showRunHud; set => Set(ref _showRunHud, value); }
+
     // Gear capture: draw the calibrated slot markers on the game while a detection session is active,
     // and an explicit "inventory not located" hint when the paper-doll can't be found — so a moved
     // inventory window / different UI scale fails VISIBLY instead of silently skipping every capture.

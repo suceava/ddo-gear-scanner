@@ -28,12 +28,10 @@ public partial class OverlayWindow : Window
     private readonly DispatcherTimer _highlightTimer;
     private readonly DispatcherTimer _runHudTimer;
 
-    // Mini run readout state: the run currently shown, and (after completion) how long to keep it up so the XP
-    // — which only lands at completion — is seen before the row hides.
+    // Mini run readout state: mirrors the run tracker's current/last run. The PIPELINE owns how long a completed
+    // run stays up (kept while you're in the quest, then a grace period after you leave), so the HUD just follows
+    // `_current` — it shows whatever the pipeline hands it and hides when the pipeline clears it.
     private RunRecord? _hudRun;
-    private DateTime? _hudLingerUntil;
-    private const double HudLingerSeconds = 15;
-    private const double HudWarnLingerSeconds = 30; // XP-miss is a call to action — keep it up longer
 
     public OverlayWindow()
     {
@@ -55,8 +53,9 @@ public partial class OverlayWindow : Window
         long ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, (IntPtr)(ex | WS_EX_TRANSPARENT | WS_EX_LAYERED));
 
-        // React to debug-setting changes without any explicit wiring (pg-loot pattern).
-        AppSettings.Instance.PropertyChanged += (_, _) => Dispatcher.Invoke(ApplyDebug);
+        // React to setting changes without any explicit wiring (pg-loot pattern): debug region borders + the
+        // run-HUD show/hide toggle both apply live.
+        AppSettings.Instance.PropertyChanged += (_, _) => Dispatcher.Invoke(() => { ApplyDebug(); RefreshRunHud(); });
         ApplyDebug();
     }
 
@@ -228,37 +227,18 @@ public partial class OverlayWindow : Window
     // ---- mini run readout (bottom-right): timer while running, XP at completion ----
 
     /// <summary>Feed the mini run readout from the run tracker's <c>CurrentChanged</c>. Shows a one-row HUD in
-    /// the game's bottom-right WHILE a run is in progress; on completion it swaps to ✓ + XP and lingers a few
-    /// seconds (the XP only lands at completion) before hiding. A null clears it — unless a just-completed run
-    /// is still inside its linger window.</summary>
+    /// the game's bottom-right WHILE a run is in progress; on completion it shows the result + XP. How long a
+    /// completed run stays up is owned by the pipeline (kept while you're in the quest, then a grace period after
+    /// you leave), so this just mirrors the run it's handed and hides when the pipeline clears it (null).</summary>
     public void SetCurrentRun(RunRecord? run) => Dispatcher.Invoke(() =>
     {
-        if (run is { Completed: true })
-        {
-            _hudRun = run;
-            _hudLingerUntil = DateTime.UtcNow.AddSeconds(run.XpMissing ? HudWarnLingerSeconds : HudLingerSeconds);
-        }
-        else if (run is not null) // in progress / paused
-        {
-            _hudRun = run;
-            _hudLingerUntil = null;
-        }
-        else if (_hudLingerUntil is null) // cleared, and not mid-linger on a completed run
-        {
-            _hudRun = null;
-        }
+        _hudRun = run;   // the pipeline keeps a completed run set through its in-quest + post-leave window
         RefreshRunHud();
     });
 
     private void RefreshRunHud()
     {
-        // Drop a completed run once its linger elapses.
-        if (_hudLingerUntil is { } until && DateTime.UtcNow >= until)
-        {
-            _hudLingerUntil = null;
-            if (_hudRun is { Completed: true }) _hudRun = null;
-        }
-        if (_hudRun is not { } r)
+        if (_hudRun is not { } r || !AppSettings.Instance.ShowRunHud)
         {
             RunHudBorder.Visibility = Visibility.Collapsed;
             return;

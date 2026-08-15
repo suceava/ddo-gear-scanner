@@ -47,8 +47,12 @@ public sealed class RunTrackerPipeline
     // lines — which OCR flickers in and out — from faking a rising edge and finalizing a freshly-started run
     // with stale XP. A real line only clears this way once it genuinely scrolls off (seconds of absence).
     private const long StaleClearMs = 10000;
-    // Backstop: clear a completed run's card after this long even if we never detect the zone change.
-    private const double CompletedCardSeconds = 25;
+    // Completed-run card/HUD lifetime. Keep it up WHILE you're in the quest, then linger a grace period after
+    // you leave so the result + XP isn't missed. Floor guarantees it shows a minimum even on an instant leave;
+    // Max is the hard backstop so idling in the completed instance doesn't pin it forever.
+    private const double CompletedCardMinSeconds = 30;   // always show at least this long after completion
+    private const long CompletedLeaveGraceMs = 25_000;   // keep showing this long after you leave the quest
+    private const double CompletedCardMaxSeconds = 180;  // hard cap (idling in-instance)
     // When idle, still OCR the reward/entry region every Nth tick so we catch the entry popup and a
     // completion whose start we missed. Now that big-region OCR is native-res (fast), we can afford this
     // more often.
@@ -108,6 +112,7 @@ public sealed class RunTrackerPipeline
     // State (guarded by _lock).
     private RunRecord? _current;       // the in-progress run, not yet in the store
     private long _emptySinceTick;      // when the tracker went blank while in a run (0 = not blank)
+    private long _completedLeftMs;     // tick you first left the quest AFTER completing it (0 = still inside)
     private IReadOnlyList<string> _lastChatLines = Array.Empty<string>();  // previous chat lines (debug view only)
     private bool _completionPresent;    // was "Adventure Completed" present in the last chat read (rising-edge detect)
     private bool _completionBaselined;  // has this run taken its first chat read (baseline) yet
@@ -449,6 +454,7 @@ public sealed class RunTrackerPipeline
                 // append-only shift (see NewChatLines), so a stale one already in the log can't re-fire.
                 bool freshChat = false;
                 int? chatXp = null;
+                int? xpNow = null;   // current chat XP (last "receive N XP" line) — hoisted for the completion-time 0-fill
                 string chatRaw = string.Empty;
                 if (readChat && !chatCrop.Empty())
                 {
@@ -464,7 +470,7 @@ public sealed class RunTrackerPipeline
                     // on a one-frame OCR miss. First read baselines to whatever's already there (no fire).
                     long nowMs = Environment.TickCount64;
                     bool completionNow = chatLines.Any(RunTextParser.IsAdventureCompleted);
-                    int? xpNow = RunTextParser.ExtractChatXp(chatLines);
+                    xpNow = RunTextParser.ExtractChatXp(chatLines);
                     bool xpNowPresent = xpNow is not null;
 
                     if (!_completionBaselined)
@@ -510,6 +516,12 @@ public sealed class RunTrackerPipeline
                     _lastLoggedName = readLabel;
                 }
                 if (dump) Dump(trackerCrop, compCrop, chatCrop, avatarCrop, readLabel, compRaw, chatRaw, avatarRaw);
+
+                // A "You receive 0 XP" line (talk-to-NPC quests award none) is a REAL result, not a missed read —
+                // if the absent→present transition never captured it (e.g. a prior quest's XP was still on screen
+                // at this run's start), fold the 0 in here. Guarded to xpNow == 0 so a lingering NON-zero prior
+                // award can't leak in (the exact trap the transition capture exists to avoid).
+                if (chatXp is null && xpNow == 0) chatXp = 0;
 
                 Apply(tracker, entry, freshChat, chatXp, compRaw, avatar);
             }
@@ -640,15 +652,22 @@ public sealed class RunTrackerPipeline
                 }
                 else if (cur.Completed)
                 {
-                    // Already recorded. Clear the completed card once you've left: a hub, OR the zone
-                    // changed (the tracker goes blank as you load out — completing often ports you to a
-                    // non-hub area). A short timeout is the backstop.
-                    bool zoneChanged = name is null;
-                    bool doneShowing = left || zoneChanged
-                        || (cur.CompletedUtc is { } cu && (DateTime.UtcNow - cu).TotalSeconds >= CompletedCardSeconds);
+                    // Already recorded — keep the finished run on the card/HUD WHILE you're in the quest, then
+                    // linger a grace period after you leave. "Out of the quest" = the left-by-name signal fired
+                    // OR the tracker blanked (loading out — completing often ports you elsewhere); track when
+                    // that first happened so the grace runs from the leave, not from completion. Clear once past
+                    // the min-show floor AND (the post-leave grace elapsed OR the hard max is hit).
+                    bool outOfQuest = left || name is null;
+                    if (outOfQuest) { if (_completedLeftMs == 0) _completedLeftMs = nowTick; }
+                    else _completedLeftMs = 0;   // still (or back) inside → reset the leave clock
+                    double sinceCompleted = cur.CompletedUtc is { } cu ? (DateTime.UtcNow - cu).TotalSeconds : 0;
+                    bool graceElapsed = _completedLeftMs != 0 && nowTick - _completedLeftMs >= CompletedLeaveGraceMs;
+                    bool doneShowing = sinceCompleted >= CompletedCardMinSeconds
+                        && (graceElapsed || sinceCompleted >= CompletedCardMaxSeconds);
                     if (doneShowing)
                     {
                         _current = null;
+                        _completedLeftMs = 0;
                         _sawEmptySinceFinalize = true;
                         currentChanged = true;
                         currentSnapshot = null;
@@ -665,6 +684,7 @@ public sealed class RunTrackerPipeline
                     _lastFinalizedName = finalized.DungeonName;
                     _sawEmptySinceFinalize = false;
                     _emptySinceTick = 0;
+                    _completedLeftMs = 0;                        // start the completed-card leave clock fresh
                     ResetPending();
                     currentChanged = true;
                     currentSnapshot = finalized;

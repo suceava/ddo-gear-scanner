@@ -23,6 +23,19 @@ public class RunTextParserTests
         Assert.Equal("The Pit", RunTextParser.CleanTrackerName(new[] { "The Pit Elite" }));
         Assert.Null(RunTextParser.CleanTrackerName(new[] { "(0/3)", "88%", "--" }));
     }
+
+    [Theory]
+    [InlineData("You receive 0 XP", 0)]                              // talk-to-NPC quests award 0 — a REAL value, not "unread"
+    [InlineData("You receive 1,234 experience points", 1234)]
+    public void ExtractChatXpReadsTheAmountIncludingZero(string line, int expected)
+        => Assert.Equal(expected, RunTextParser.ExtractChatXp(new[] { line }));
+
+    [Fact]
+    public void ExtractChatXpTakesTheLastAwardAndIsNullWhenAbsent()
+    {
+        Assert.Equal(0, RunTextParser.ExtractChatXp(new[] { "You receive 500 XP", "You receive 0 XP" })); // quest total is last
+        Assert.Null(RunTextParser.ExtractChatXp(new[] { "You slay the goblin", "Adventure Completed" }));
+    }
 }
 
 public class QuestWikiTests

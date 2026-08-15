@@ -22,6 +22,10 @@
                           IsChecked="{Binding AutoOpenWiki}" FontWeight="SemiBold" />
                 <TextBlock Text="As soon as a run begins, the quest's wiki page (with its map) opens in your browser."
                            Foreground="{StaticResource TextMuted}" FontSize="11.5" TextWrapping="Wrap" Margin="22,3,0,0" />
+                <CheckBox Content="Show the in-game run overlay (bottom-right)"
+                          IsChecked="{Binding ShowRunHud}" FontWeight="SemiBold" Margin="0,12,0,0" />
+                <TextBlock Text="A small readout on the game with the live timer while a quest is in progress, and the XP when it completes."
+                           Foreground="{StaticResource TextMuted}" FontSize="11.5" TextWrapping="Wrap" Margin="22,3,0,0" />
             </StackPanel>
         </Border>
 
