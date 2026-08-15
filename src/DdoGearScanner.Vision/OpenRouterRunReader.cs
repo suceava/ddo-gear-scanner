@@ -56,6 +56,29 @@ public sealed class OpenRouterRunReader
         catch { return null; }
     }
 
+    private const string ChatXpPrompt = """
+        This is the chat-log region from Dungeons & Dragons Online at the moment a quest completed. Find the
+        quest-completion experience line — "You receive N XP" (or "N experience points"). Return ONLY a JSON
+        object, no markdown: { "xp": int or null }. 0 is a VALID amount (some quests award none), so return 0
+        for "You receive 0 XP". If no such line is visible in the image, return {"xp": null}.
+        """;
+
+    /// <summary>Read the quest-completion XP from the chat crop at completion. The vision LLM handles the noisy,
+    /// fast-scrolling chat far better than local OCR (which misses/garbles the one-shot "You receive N XP" line);
+    /// 0 is returned as 0, not null. Null on failure — the local capture's value stands.</summary>
+    public async Task<int?> ReadChatXpAsync(OpenCvMat chatBgr, CancellationToken ct = default)
+    {
+        string? reply = await _client.ReadImageAsync(ChatXpPrompt, chatBgr, ct).ConfigureAwait(false);
+        string? json = OpenRouterClient.ExtractJson(reply);
+        if (json is null) return null;
+        try
+        {
+            using JsonDocument doc = JsonDocument.Parse(json);
+            return Int(doc.RootElement, "xp");
+        }
+        catch { return null; }
+    }
+
     public async Task<CharacterInfo?> ReadCharacterAsync(OpenCvMat avatarBgr, CancellationToken ct = default)
     {
         string? reply = await _client.ReadImageAsync(CharacterPrompt, avatarBgr, ct).ConfigureAwait(false);

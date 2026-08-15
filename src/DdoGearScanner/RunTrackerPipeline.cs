@@ -140,6 +140,8 @@ public sealed class RunTrackerPipeline
     private readonly HashSet<string> _llmCharDone = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _llmCharNames = new(StringComparer.Ordinal);   // local key → confirmed name
     private int _llmCharBusy;          // 1 while an avatar escalation is in flight
+    private int _llmChatBusy;          // 1 while a completion-chat XP escalation is in flight
+    private readonly HashSet<string> _llmChatDone = new(StringComparer.Ordinal);   // run ids already chat-escalated
     private string? _armedArea;        // the area key you stood in while the popup was up (to detect Enter vs Cancel)
     private string? _shownEntryName;   // the quest name currently shown on the "ready" card (null = not shown)
     private bool _leftPromptActive;    // the "you left the dungeon — pause/cancel/keep going?" banner is showing
@@ -523,7 +525,7 @@ public sealed class RunTrackerPipeline
                 // award can't leak in (the exact trap the transition capture exists to avoid).
                 if (chatXp is null && xpNow == 0) chatXp = 0;
 
-                Apply(tracker, entry, freshChat, chatXp, compRaw, avatar);
+                Apply(tracker, entry, freshChat, chatXp, compRaw, avatar, chatCrop);
             }
             catch (Exception ex) { Log($"read error {ex.GetType().Name}: {ex.Message}"); }
             finally { trackerCrop.Dispose(); compCrop.Dispose(); chatCrop.Dispose(); avatarCrop.Dispose(); Interlocked.Exchange(ref _busy, 0); }
@@ -553,7 +555,7 @@ public sealed class RunTrackerPipeline
     // Crucially, while a run is active we IGNORE which dungeon name is read (you can't hop dungeons), so
     // OCR flicker on the ornate title can't spawn phantom "went somewhere else" runs. A run ends only on
     // Completed, returning to a hub, or the tracker staying empty.
-    private void Apply(TrackerStatus tracker, QuestEntry? entry, bool freshChat, int? chatXp, string compRaw, CharacterInfo? avatar)
+    private void Apply(TrackerStatus tracker, QuestEntry? entry, bool freshChat, int? chatXp, string compRaw, CharacterInfo? avatar, OpenCvMat chatCrop)
     {
         RunRecord? finalized = null;
         bool currentChanged = false;
@@ -570,10 +572,12 @@ public sealed class RunTrackerPipeline
             if (chatXp is not null) _runXp = chatXp;   // keep the freshest chat XP for the active run
             if (avatar is not null)                    // cache the latest character name/level for run-start stamping
             {
-                // The LLM-confirmed name is authoritative for that character — local OCR jitter (a stray
-                // quote etc.) must not clobber it. A DIFFERENT character (new key) goes back to local.
+                // The LLM-confirmed name is authoritative for that character — local OCR jitter (a stray quote,
+                // a dropped letter) must not clobber it. Match the local read to a confirmed name FUZZILY, so a
+                // never-before-seen misread variant still resolves to the locked name instead of flip-flopping
+                // back to the raw read. Only a clearly-different name falls through to the raw local value.
                 if (!string.IsNullOrWhiteSpace(avatar.Name))
-                    _detectedName = _llmCharNames.TryGetValue(Key(avatar.Name), out string? confirmed) ? confirmed : avatar.Name;
+                    _detectedName = ConfirmedFor(avatar.Name) ?? avatar.Name;
                 // Level: reject a read LOWER than the current one for the SAME character — the avatar OCR
                 // drops the leading digit sometimes (16 -> 6), which was flipping the level. Levels only go
                 // UP (a ding), so a lower read is a misread; a DIFFERENT character (new key) starts fresh.
@@ -688,6 +692,10 @@ public sealed class RunTrackerPipeline
                     ResetPending();
                     currentChanged = true;
                     currentSnapshot = finalized;
+                    // If local capture never got the XP (the one-shot "You receive N XP" scrolled/garbled), fire
+                    // ONE LLM read of the chat now — the vision model reads the noisy log far better. Async: it
+                    // back-fills this run's XP during the completed-card linger window.
+                    if (finalized.Xp is null) MaybeLlmChat(chatCrop, finalized.Id);
                 }
                 else if (left)
                 {
@@ -871,6 +879,56 @@ public sealed class RunTrackerPipeline
 
     /// <summary>Fire ONE LLM read when a character (by local OCR name key) hasn't been LLM-confirmed yet —
     /// so each login/relog costs one call, and OCR jitter (absorbed by Key's normalization) costs none.</summary>
+    /// <summary>The LLM-confirmed character name that <paramref name="localName"/> fuzzy-matches (containment or
+    /// ≤40% edit distance, same as the tracker match), or null. Lets an OCR-jitter variant of the avatar name
+    /// resolve to the locked name instead of flip-flopping. Caller holds <see cref="_lock"/>.</summary>
+    private string? ConfirmedFor(string? localName)
+    {
+        string k = Key(localName);
+        if (k.Length < 3) return null;
+        foreach (string confirmed in _llmCharNames.Values)
+            if (NameSimilar(confirmed, k)) return confirmed;
+        return null;
+    }
+
+    /// <summary>One-shot LLM read of the chat at completion to recover the quest XP local OCR missed. Deduped per
+    /// run id + one in flight. On success it back-fills the run's XP (only while it's still the current, unedited
+    /// run — its completed-card linger window) and re-persists it (which re-syncs to the account).</summary>
+    private void MaybeLlmChat(OpenCvMat chatCrop, string runId)
+    {
+        if (_llm is not { IsEnabled: true } || chatCrop.Empty()) return;
+        lock (_lock)
+        {
+            if (!_llmChatDone.Add(runId)) return;                                    // already escalated this run
+            if (Interlocked.CompareExchange(ref _llmChatBusy, 1, 0) == 1) return;    // one in flight at a time
+        }
+        OpenCvMat crop = chatCrop.Clone();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                int? xp = await _llm.ReadChatXpAsync(crop).ConfigureAwait(false);
+                if (xp is not { } value) { Log("llm-chat: no xp"); return; }
+                RunRecord? updated = null;
+                lock (_lock)
+                {
+                    // Correct THIS run only, still current (linger) and not hand-edited, and only if it changes.
+                    if (_current is { Completed: true, Edited: false } cur && cur.Id == runId && cur.Xp != value)
+                    {
+                        _current = cur with { Xp = value };
+                        _store.Update(_current);
+                        _runXp = value;
+                        updated = _current;
+                        Log($"llm-chat: xp {cur.Xp?.ToString() ?? "null"} -> {value}");
+                    }
+                }
+                if (updated is not null) CurrentChanged?.Invoke(updated);
+            }
+            catch (Exception ex) { Log($"llm-chat error: {ex.Message}"); }
+            finally { crop.Dispose(); Interlocked.Exchange(ref _llmChatBusy, 0); }
+        });
+    }
+
     private void MaybeLlmAvatar(CharacterInfo local, OpenCvMat avatarCrop)
     {
         if (_llm is not { IsEnabled: true }) return;
@@ -878,7 +936,11 @@ public sealed class RunTrackerPipeline
         if (key.Length < 3) return;
         lock (_lock)
         {
-            if (_llmCharDone.Contains(key)) return;                                  // already escalated (ok or failed)
+            // Only escalate the character when you're ENTERING a quest (a popup is armed) — that's the moment the
+            // run will stamp it, the nameplate reads cleanly at the entrance, and it avoids paying for characters
+            // you merely look at while idle. Skip if it's already confirmed (exact key OR a fuzzy variant).
+            if (_pendingEntry is null) return;
+            if (_llmCharDone.Contains(key) || ConfirmedFor(local.Name) is not null) return;
             if (Interlocked.CompareExchange(ref _llmCharBusy, 1, 0) == 1) return;    // one in flight at a time
         }
         OpenCvMat crop = avatarCrop.Clone();
