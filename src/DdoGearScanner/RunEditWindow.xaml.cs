@@ -15,11 +15,14 @@ public partial class RunEditWindow : Window
     private readonly RunRecord _run;
     public RunRecord? Result { get; private set; }
 
-    public RunEditWindow(RunRecord run)
+    public RunEditWindow(RunRecord run, bool addMode = false)
     {
         InitializeComponent();
         WindowChrome.UseDarkTitleBar(this);
         _run = run;
+        // Add mode = filling in a just-started manual run (the entry popup was missed), so it's framed as
+        // starting the run rather than editing one.
+        if (addMode) { Title = "Start run"; HeaderText.Text = "Start run"; SaveButton.Content = "Start"; }
         NameBox.Text = run.DungeonName;
         CharacterBox.Text = run.CharacterName ?? string.Empty;
         LevelBox.Text = run.QuestLevel?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
@@ -40,7 +43,9 @@ public partial class RunEditWindow : Window
         if (diff.Length > 0 && !items.Any(d => string.Equals(d, diff, StringComparison.OrdinalIgnoreCase)))
             items.Insert(4, diff);
         DifficultyBox.ItemsSource = items;
-        DifficultyBox.SelectedItem = items.FirstOrDefault(d => string.Equals(d, diff, StringComparison.OrdinalIgnoreCase));
+        // Add mode with no difficulty yet → default to Elite (the usual manual-run case); else reflect the run.
+        string? diffToSelect = diff.Length == 0 && addMode ? "Elite" : diff;
+        DifficultyBox.SelectedItem = items.FirstOrDefault(d => string.Equals(d, diffToSelect, StringComparison.OrdinalIgnoreCase));
 
         // Party is manual (never OCR'd). Display labels map to the stored "solo"/"group"; "—" clears it.
         PartyBox.ItemsSource = new List<string> { "—", "Solo", "Group" };

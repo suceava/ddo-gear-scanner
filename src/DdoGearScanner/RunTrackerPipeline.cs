@@ -120,6 +120,8 @@ public sealed class RunTrackerPipeline
     private bool _xpPresent;            // was a "receive N XP" line present last read (rising-edge, same guard as completion)
     private long _xpAbsentSince;        // tick the XP line first went absent (0 = present) — flicker debounce
     private int? _runXp;                // latest "receive N XP" seen in chat this run (XP is chat-only)
+    private string? _lastTrackerName;  // latest non-hub quest name read from the tracker panel — the fallback
+                                       // quest name for a MANUAL start when the entry popup was missed/gone
     private string? _detectedName;     // latest character name OCR'd from the avatar region
     private int? _detectedLevel;       // latest character level OCR'd from the avatar region
     private string? _detectedLevelKey; // the character key _detectedLevel belongs to (for the ding-up guard)
@@ -237,13 +239,32 @@ public sealed class RunTrackerPipeline
 
     /// <summary>Manually begin a run (detection missed the entry). Uses the held entry popup's name/level
     /// if one is pending, otherwise an unnamed run the user can rename in the grid.</summary>
-    public void ManualStart()
+    /// <summary>A DRAFT for a manual start — prefilled from what we know (popup name if any, else the current
+    /// tracker read; detected character + level; sticky party), NOT committed. The UI shows it in the add modal
+    /// first; only <see cref="StartManual"/> actually starts the run. null if a run is already active.</summary>
+    public RunRecord? BuildManualDraft()
+    {
+        lock (_lock)
+        {
+            if (_current is not null) return null;
+            // Popup name is already proper-case; the tracker title OCRs as ALL CAPS, so title-case it for display.
+            // Case is cosmetic only — the backend re-resolves the quest by slug (case-insensitive) on ingest.
+            string name = _pendingEntry?.Name ?? (_lastTrackerName is { } t ? TitleCaseQuest(t) : string.Empty);
+            return BuildRun(name)
+                with { QuestLevel = _pendingEntry?.QuestLevel, Difficulty = _pendingEntry?.Difficulty, QuestDuration = _pendingEntry?.Duration };
+        }
+    }
+
+    /// <summary>Commit a manual run from the add modal (Save). EnteredUtc is stamped NOW so the timer starts when
+    /// you confirm, not when the draft was built. Cancel simply never calls this — nothing is started.</summary>
+    public void StartManual(RunRecord record)
     {
         RunRecord started;
         lock (_lock)
         {
             if (_current is not null) return;
-            started = NewRun(_pendingEntry?.Name ?? string.Empty) with { QuestLevel = _pendingEntry?.QuestLevel, Difficulty = _pendingEntry?.Difficulty, QuestDuration = _pendingEntry?.Duration };
+            _leftTicks = 0;
+            started = record with { EnteredUtc = DateTime.UtcNow };
             _current = started;
             _pendingEntry = null; _armedArea = null; _shownEntryName = null;
             _sawEmptySinceFinalize = false;
@@ -569,6 +590,9 @@ public sealed class RunTrackerPipeline
 
         lock (_lock)
         {
+            // Cache the current tracker quest name (skip hubs/empty) so a MANUAL start can name the run even
+            // when the entry popup was missed — it reflects what's on the tracker panel right now.
+            if (name is not null && !isHub) _lastTrackerName = name;
             if (chatXp is not null) _runXp = chatXp;   // keep the freshest chat XP for the active run
             if (avatar is not null)                    // cache the latest character name/level for run-start stamping
             {
@@ -1021,12 +1045,23 @@ public sealed class RunTrackerPipeline
     // The remembered solo/group default for a fresh run — "group" only when explicitly last set to it, else "solo".
     private static string StickyParty() => AppSettings.Instance.LastParty == "group" ? "group" : "solo";
 
+    // The tracker title OCRs in ALL CAPS; title-case it for a readable draft name (cosmetic — the server matches
+    // by slug). ToTitleCase leaves already-caps words alone, so lowercase first.
+    private static string TitleCaseQuest(string s) =>
+        System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(s.Trim().ToLowerInvariant());
+
     private RunRecord NewRun(string name)
     {
         _leftTicks = 0;   // fresh "am I still in my quest?" streak for the new run
+        return BuildRun(name);
+    }
+
+    /// <summary>Build a run record WITHOUT committing it (no side effects) — stamps the auto-detected character
+    /// name + level and the sticky solo/group default. Shared by NewRun (auto/commit) and the manual-start
+    /// draft (which is shown in the add modal first, and only committed via <see cref="StartManual"/>).</summary>
+    private RunRecord BuildRun(string name)
+    {
         (string? id, int? level) = _character();
-        // Stamp the auto-detected character name + level (from the avatar region) when available, plus the sticky
-        // solo/group default (party is manual — never OCR'd — so it rides the last value you set).
         return new RunRecord(RunRecord.NewId(), name, null, _detectedLevel ?? level, id, DateTime.UtcNow, null, null,
             false, string.Empty, false, null, _detectedName, Party: StickyParty());
     }

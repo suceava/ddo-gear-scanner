@@ -7,7 +7,7 @@
         Background="{StaticResource BgWindow}" Foreground="{StaticResource Parchment}"
         TextOptions.TextFormattingMode="Display">
     <StackPanel Margin="22,16,22,18">
-        <TextBlock Text="Edit run" FontSize="17" Style="{StaticResource Title}" Margin="0,0,0,14" />
+        <TextBlock x:Name="HeaderText" Text="Edit run" FontSize="17" Style="{StaticResource Title}" Margin="0,0,0,14" />
 
         <TextBlock Text="Quest" Foreground="{StaticResource TextMuted}" FontSize="12" />
         <TextBox x:Name="NameBox" Margin="0,2,0,12" MaxLength="80" />
@@ -84,7 +84,7 @@
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Cancel" Click="Cancel_Click" Margin="0,0,8,0" IsCancel="True" />
-            <Button Content="Save" Click="Save_Click" IsDefault="True" />
+            <Button x:Name="SaveButton" Content="Save" Click="Save_Click" IsDefault="True" />
         </StackPanel>
     </StackPanel>
 </Window>

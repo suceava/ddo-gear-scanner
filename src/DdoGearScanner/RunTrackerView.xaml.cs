@@ -226,7 +226,16 @@ public partial class RunTrackerView : UserControl
         _rows.FirstOrDefault(r => r.Record.Id == updated.Id)?.Replace(updated);
     }
 
-    private void Start_Click(object sender, RoutedEventArgs e) => _pipeline.ManualStart();
+    // Manual start goes THROUGH the add modal: build a prefilled draft (quest name from the tracker, detected
+    // character, sticky party, difficulty defaulted to Elite), let the user confirm/fill, and only start on
+    // Save. Cancel starts nothing.
+    private void Start_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pipeline.BuildManualDraft() is not { } draft) return; // a run is already active
+        var dlg = new RunEditWindow(draft, addMode: true) { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true && dlg.Result is not null)
+            _pipeline.StartManual(dlg.Result);
+    }
     private void Complete_Click(object sender, RoutedEventArgs e) => _pipeline.ManualComplete();
     private void Cancel_Click(object sender, RoutedEventArgs e) => _pipeline.ManualCancel();
     private void OpenWiki_Click(object sender, RoutedEventArgs e) => OpenWiki(_current?.DungeonName ?? _heldEntry?.Name);
