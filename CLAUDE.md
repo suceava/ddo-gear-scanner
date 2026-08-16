@@ -83,9 +83,14 @@ data folder is **`%APPDATA%\DdoCompanion\`** (`AppSettings.ResolveDataDir` auto-
 `DdoGearScanner\` folder over on first launch — one-time `Directory.Move`, no data loss). The **namespace
 and solution/repo name deliberately stay `DdoGearScanner`** (repo identity — do not change). `ShellWindow` is the main window: a header (product mark + a **detected-character chip** + a global ☰ menu
 with Settings/Debug) + a left **nav rail** (Home · Gear Loadout · Run Tracker) swapping a `ContentControl`.
-The header chip DISPLAYS the run-tracker's detected character (name+level, polled ~1s) — green dot = matches
-a saved profile, amber + "＋ Add" = new (one click creates + activates it). It's display-only: detection
-never switches the Gear-active character (the Gear dropdown stays the manual selector). The two
+The header chip DISPLAYS the **active run's** character (name+level, polled ~1s) — green dot = matches a saved
+profile, amber + "＋ Add" = new (one click creates + activates it). It shows the run's stable, quest-start-
+stamped name, NOT the raw per-frame avatar OCR (which flip-flops) and NOT the Gear-page character; the chip is
+**hidden when no run is active** (real name or nothing — never a second, wrong name). Display-only: detection
+never switches the Gear-active character (the Gear dropdown stays the manual selector). A **footer** shows the
+current build (`v{Version}`) and, on startup, checks GitHub for a newer release — surfacing a clickable
+"Update available" link (orange "major" warning for a major bump); best-effort, silent on offline/rate-limit
+(`UpdateChecker`). The two
 features are **UserControl pages**: `GearLoadoutView` (the old loadout sheet + character selector + gear
 menu, extracted from the deleted `CaptureListWindow`) and `RunTrackerView` (extracted from the deleted
 `RunTrackerWindow`). `HomeView` is a landing page. The active page is remembered (`AppSettings.ActivePage`).
@@ -147,8 +152,14 @@ since pausing / cancelling / "just stepped out" are all real.
 **UI (`RunTrackerView`):** a Current-Run card (quest name = title, colored status **badge** —
 IN PROGRESS / **PAUSED** (amber) / COMPLETED, big timer, chips incl. **Character**, helper text) with
 manual **Start / Complete / Pause·Resume / Cancel** overrides and a single **✎ Edit** dialog
-(`RunEditWindow`) that fixes ANY field consistently (name / character + char-level / difficulty / quest
-level / XP / **Time**). The XP+Time row hides for an in-progress run (unknown until completion); editing
+(`RunEditWindow`) that fixes ANY field consistently (name / character + char-level / difficulty / **party** /
+quest level / XP / **Time**). **Manual Start goes THROUGH the add modal**: `BuildManualDraft` (prefilled —
+quest name from the current tracker read if the entry popup was missed, detected character, sticky party,
+difficulty defaulted to Elite; no side effects) → `RunEditWindow` in add-mode ("Start run", Start button) →
+only Save commits via `StartManual` (EnteredUtc stamped at Save, so form-fill time isn't counted). **Cancel
+starts nothing.** **Party** (solo/group) is MANUAL — never OCR'd; a sticky default (`AppSettings.LastParty`,
+stamped on each auto-captured run) rides your last choice, with a segmented Solo|Group toggle inline on the
+live-run card. The XP+Time row hides for an in-progress run (unknown until completion); editing
 Time keeps the real start and moves the end (`CompletedUtc = EnteredUtc + duration`). Inputs are guarded
 — length caps, digit-only number fields, a time field that accepts `m:ss`/`h:mm:ss` and **validates** (so
 "22:84" is rejected, not silently normalized) with an inline error label; levels are 1–40. The difficulty
@@ -284,7 +295,14 @@ next integration — same account/key, a gear/loadout endpoint on the backend).
 dotnet build
 dotnet test                 # parser tests (Windows)
 # run: launch the built exe (asInvoker, no UAC). dotnet run also works.
+.\publish.ps1                       # self-contained single-file DdoCompanion.exe -> dist\
+.\publish.ps1 -Release v0.10.0      # + create the GitHub release (gh CLI), exe attached
 ```
+
+**Versioning / update check:** `<Version>` in the csproj is the dev baseline; `publish.ps1 -Release vX.Y.Z`
+stamps `-p:Version=X.Y.Z` so the assembly version equals the release tag. On startup the app compares its
+version to GitHub `releases/latest` (`UpdateChecker`, repo `suceava/ddo-gear-scanner`) and shows the footer
+update link when newer. Bump the csproj `<Version>` to the released version so dev builds don't nag.
 
 Debug crop dumps go to `%APPDATA%\DdoGearScanner\debug\gear\` (off by default — see Debug system).
 Persistence: `loadout-<id>.json`, `slotmap.json`, `settings.json`, `characters.json`, `runs.json` in `%APPDATA%`.
