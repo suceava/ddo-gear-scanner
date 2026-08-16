@@ -105,6 +105,19 @@
             </DockPanel>
         </Border>
 
+        <!-- Footer: always shows the current build; surfaces an update link when a newer GitHub release exists. -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource BgPanel}" Padding="14,4"
+                BorderBrush="{StaticResource BorderDim}" BorderThickness="0,1,0,0">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="VersionText" Text="" Foreground="{StaticResource TextMuted}" FontSize="11.5"
+                           VerticalAlignment="Center" />
+                <!-- Only THIS text is the link (sized to its content); shown only when an update exists. -->
+                <TextBlock x:Name="UpdateText" Margin="16,0,0,0" Visibility="Collapsed" Cursor="Hand"
+                           MouseLeftButtonUp="Update_Click" FontSize="11.5" FontWeight="SemiBold"
+                           Foreground="{StaticResource GoldBright}" VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
         <!-- Body: nav rail (left) + active page (right) -->
         <Grid>
             <Grid.ColumnDefinitions>

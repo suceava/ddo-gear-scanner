@@ -65,6 +65,36 @@ public partial class ShellWindow : Window
         UpdateCharChip();
 
         _ = RefreshAccountAsync();
+
+        // Footer: always show the current build; check GitHub for a newer release in the background.
+        VersionText.Text = $"v{UpdateChecker.CurrentDisplay}";
+        _ = CheckForUpdateAsync();
+    }
+
+    // ---- update check (footer) ----
+
+    private string? _updateUrl;
+
+    private async Task CheckForUpdateAsync()
+    {
+        UpdateInfo? info = await UpdateChecker.CheckAsync();
+        if (info is not { UpdateAvailable: true }) return; // offline / up to date → footer just shows the version
+        _updateUrl = info.Url;
+        UpdateText.Text = info.Major
+            ? $"Major update: v{info.Latest} — may have breaking changes"
+            : $"Update available: v{info.Latest}";
+        UpdateText.Foreground = info.Major ? UpdateWarn : (Brush)FindResource("GoldBright");
+        UpdateText.ToolTip = "Open the latest release on GitHub";
+        UpdateText.Visibility = Visibility.Visible;
+    }
+
+    private static readonly Brush UpdateWarn = Frozen(0xE8, 0x7A, 0x3A); // orange — major bump, possible breaking changes
+
+    private void Update_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_updateUrl)) return;
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = _updateUrl, UseShellExecute = true }); }
+        catch { /* no browser / bad url shouldn't crash the app */ }
     }
 
     // ---- account menu ----

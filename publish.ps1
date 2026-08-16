@@ -36,10 +36,21 @@ Start-Sleep -Seconds 1
 if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
 if (Test-Path $distDir) { Remove-Item $distDir -Recurse -Force }
 
+# When cutting a release, stamp the assembly version with the tag (v0.10.0 -> 0.10.0) so the in-app update
+# check compares the running build against the GitHub release tag. Non-release builds keep the csproj default.
+$versionArgs = @()
+if ($Release) {
+    $ver = $Release.TrimStart('v', 'V')
+    if ($ver -notmatch '^\d+\.\d+\.\d+') { throw "Release must look like v1.2.3 (got '$Release')" }
+    $versionArgs = @("-p:Version=$ver")
+    Write-Output "Stamping build version $ver"
+}
+
 dotnet publish $proj `
     -c Release `
     -r win-x64 `
     --self-contained `
+    @versionArgs `
     -p:PublishSingleFile=true `
     -p:IncludeNativeLibrariesForSelfExtract=true `
     "-p:EnableCompressionInSingleFile=$($Compress.IsPresent.ToString().ToLower())" `
