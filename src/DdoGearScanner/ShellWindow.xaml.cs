@@ -126,43 +126,35 @@ public partial class ShellWindow : Window
 
     private void UpdateCharChip()
     {
-        (string? detName, int? detLevel) = _runPipeline.DetectedCharacter;
-        bool detected = !string.IsNullOrWhiteSpace(detName);
-
-        // Show the detected character when we have one; otherwise fall back to the active Gear character
-        // so the chip isn't empty.
-        string? name = detected ? detName : _charStore.Active?.Name;
-        int? level = detected ? detLevel : _charStore.Active?.Level;
+        // Display-only: the top-bar character is the ACTIVE RUN's character — a single stable name stamped at
+        // quest start. It is NEVER the raw per-frame avatar OCR (which flickers good/garbage every tick) and
+        // never a stand-in like the active Gear char. So it's the real character, or nothing — never a second,
+        // different name that reads as broken. No run → hide the chip entirely.
+        RunRecord? run = _runPipeline.Current;
+        string? name = run?.CharacterName;
+        int? level = run?.CharacterLevel;
 
         if (string.IsNullOrWhiteSpace(name))
         {
-            CharName.Text = "No character detected";
-            CharLevel.Text = "";
-            CharDot.Fill = (Brush)FindResource("TextMuted");
-            CharAddButton.Visibility = Visibility.Collapsed;
+            CharChip.Visibility = Visibility.Collapsed;
             _pendingAdd = null;
             return;
         }
 
+        CharChip.Visibility = Visibility.Visible;
         CharName.Text = name!;
         CharLevel.Text = level is int lv ? $"Lv {lv}" : "";
 
         bool hasProfile = _charStore.Profiles.Any(p => NameEq(p.Name, name));
-        if (!detected)
+        if (hasProfile)
         {
-            CharDot.Fill = (Brush)FindResource("Gold");     // showing the active Gear char (fallback), neutral
-            CharAddButton.Visibility = Visibility.Collapsed;
-            _pendingAdd = null;
-        }
-        else if (hasProfile)
-        {
-            CharDot.Fill = CharMatched;                     // detected + saved
+            CharDot.Fill = CharMatched;                     // known + saved
             CharAddButton.Visibility = Visibility.Collapsed;
             _pendingAdd = null;
         }
         else
         {
-            CharDot.Fill = CharUnknown;                     // detected, no profile → offer Add
+            CharDot.Fill = CharUnknown;                     // no profile → offer Add
             CharAddButton.Visibility = Visibility.Visible;
             _pendingAdd = (name!, level);
         }

@@ -162,7 +162,7 @@ public partial class RunTrackerView : UserControl
 
     private void UpdateCurrentStatus()
     {
-        // ✎ Edit is available whenever there's a current run (in-progress or the just-completed one shown).
+        // ✎ Edit is available whenever there's a current run (the solo/group toggle sits inline on the chips row).
         EditButton.Visibility = _current is not null ? Visibility.Visible : Visibility.Collapsed;
         // The "you left?" banner only makes sense for a live, un-paused run.
         if (_current is null or { Completed: true } or { Paused: true }) LeftBanner.Visibility = Visibility.Collapsed;
@@ -185,17 +185,20 @@ public partial class RunTrackerView : UserControl
             if (warnXp) CurrentHint.Foreground = WarnAccent;
             return;
         }
+        // Pre-run states: NO character chip. The live avatar OCR flip-flops between good/garbage reads every
+        // frame, and the card redraws each second — showing it here is just noise. The name that matters is
+        // locked at quest start and shown on the in-progress card (above), so we wait for that.
         if (_heldEntry is { } e)
         {
             SetActionButtons(start: true, complete: false, cancel: false, wiki: !string.IsNullOrWhiteSpace(e.Name));
             SetCard(e.Name, "READY", Gold, "Enter the quest to start the run, or Start it manually.", "",
-                new (string, string?)[] { ("Character", WhoChip(_pipeline.DetectedCharacter)), ("Difficulty", e.Difficulty), ("Quest Lvl", e.QuestLevel?.ToString()) });
+                new (string, string?)[] { ("Difficulty", e.Difficulty), ("Quest Lvl", e.QuestLevel?.ToString()) });
             return;
         }
         SetActionButtons(start: true, complete: false, cancel: false, wiki: false);
         SetCard("No active run", null, null,
             "Enter a quest and it'll appear here automatically — or Start a run manually if detection misses it.",
-            "", new (string, string?)[] { ("Character", WhoChip(_pipeline.DetectedCharacter)) });
+            "", NoChips);
     }
 
     // "Name · Level" for the character chip, or just the name if level is unknown (null when neither).
@@ -210,6 +213,17 @@ public partial class RunTrackerView : UserControl
         WikiButton.Visibility = wiki ? Visibility.Visible : Visibility.Collapsed;
         PauseButton.Visibility = pause ? Visibility.Visible : Visibility.Collapsed;
         PauseButton.Content = paused ? "▶ Resume" : "⏸ Pause";
+    }
+
+    // Set the live run's party (manual — never OCR'd). Persists to the run, keeps the history row + the
+    // sticky default in step. UpdateCurrent → CurrentChanged → the card rebuilds with the new highlight.
+    private void SetParty(string value)
+    {
+        if (_current is not { } c || c.Party == value) return;
+        AppSettings.Instance.LastParty = value;   // this choice rides forward as the default for new runs
+        var updated = c with { Party = value, Edited = true };
+        _pipeline.UpdateCurrent(updated);
+        _rows.FirstOrDefault(r => r.Record.Id == updated.Id)?.Replace(updated);
     }
 
     private void Start_Click(object sender, RoutedEventArgs e) => _pipeline.ManualStart();
@@ -264,6 +278,49 @@ public partial class RunTrackerView : UserControl
         CurrentMeta.Children.Clear();
         foreach ((string chipLabel, string? value) in chips)
             if (!string.IsNullOrWhiteSpace(value)) CurrentMeta.Children.Add(Chip(chipLabel, value!));
+        // Solo/group is manual, so it's a live toggle inline with the info chips — one click, no editor.
+        if (_current is { } cur) CurrentMeta.Children.Add(PartyChip(cur.Party));
+    }
+
+    /// <summary>A segmented Solo | Group toggle, chip-styled to sit among the meta chips. The active side is
+    /// highlighted; clicking a side sets that party. Null (unset) leaves both un-highlighted.</summary>
+    private Border PartyChip(string? party)
+    {
+        var sp = new StackPanel { Orientation = Orientation.Horizontal };
+        sp.Children.Add(Segment("Solo", party == "solo"));
+        sp.Children.Add(Segment("Group", party == "group"));
+        return new Border
+        {
+            Background = BgRaised,
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(3),
+            Margin = new Thickness(0, 0, 9, 0),
+            Child = sp,
+            ToolTip = "Solo or group — sets this run and the default for future runs.",
+        };
+    }
+
+    private Border Segment(string value, bool active)
+    {
+        var tb = new TextBlock
+        {
+            Text = value,
+            FontSize = 12.5,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = active ? Res("BgWindow") : TextMuted,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        // Active fill is cream (not gold) so the selected side never reads like the gold IN PROGRESS badge.
+        var b = new Border
+        {
+            Background = active ? Res("Parchment") : Brushes.Transparent,
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(11, 4, 11, 4),
+            Cursor = Cursors.Hand,
+            Child = tb,
+        };
+        b.MouseLeftButtonUp += (_, _) => SetParty(value.ToLowerInvariant());
+        return b;
     }
 
     private Border Chip(string label, string value)
