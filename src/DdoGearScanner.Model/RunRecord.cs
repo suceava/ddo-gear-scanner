@@ -41,7 +41,10 @@ public sealed record RunRecord(
     DateTime? PausedUtc = null,
     // Cloud-sync bookkeeping: true once this run has been pushed to the DDO Companion account. Editing a
     // run resets it to false (dirty → re-push). Not shown in the UI; persisted so the outbox survives restarts.
-    bool Synced = false)
+    bool Synced = false,
+    // Solo vs group — "solo"/"group" or null (unknown). DDO doesn't expose it, so it's set MANUALLY in the
+    // run editor; it rides the sync wire to feed the web guide's completion matrix. Never OCR'd.
+    string? Party = null)
 {
     /// <summary>Elapsed run time, honoring a pause (frozen at <see cref="PausedUtc"/> while paused).</summary>
     public TimeSpan Elapsed(DateTime nowUtc)

@@ -41,6 +41,10 @@ public partial class RunEditWindow : Window
             items.Insert(4, diff);
         DifficultyBox.ItemsSource = items;
         DifficultyBox.SelectedItem = items.FirstOrDefault(d => string.Equals(d, diff, StringComparison.OrdinalIgnoreCase));
+
+        // Party is manual (never OCR'd). Display labels map to the stored "solo"/"group"; "—" clears it.
+        PartyBox.ItemsSource = new List<string> { "—", "Solo", "Group" };
+        PartyBox.SelectedItem = _run.Party switch { "solo" => "Solo", "group" => "Group", _ => "—" };
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -67,11 +71,16 @@ public partial class RunEditWindow : Window
         if (level is < 1 or > 40) { ShowError("Quest level must be 1–40."); return; }
         if (charLevel is < 1 or > 40) { ShowError("Character level must be 1–40."); return; }
 
+        string? party = PartyBox.SelectedItem switch { "Solo" => "solo", "Group" => "group", _ => null };
+        // Setting a party makes it the sticky default for future auto-captured runs (rides until changed).
+        if (party is not null) AppSettings.Instance.LastParty = party;
+
         Result = _run with
         {
             DungeonName = NameBox.Text.Trim(),
             CharacterName = string.IsNullOrWhiteSpace(CharacterBox.Text) ? null : CharacterBox.Text.Trim(),
             Difficulty = DifficultyBox.SelectedItem as string,
+            Party = party,
             QuestLevel = level,
             CharacterLevel = charLevel,
             Xp = xp,

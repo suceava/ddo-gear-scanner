@@ -388,6 +388,9 @@ public sealed class RunRow : INotifyPropertyChanged
         }
     }
 
+    // Solo vs group — manual, set via the run editor (not inline; it's an enum). Read-only display.
+    public string Party => Record.Party switch { "solo" => "Solo", "group" => "Group", _ => "—" };
+
     public string XpText
     {
         get => Record.Xp?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
@@ -449,7 +452,7 @@ public sealed class RunRow : INotifyPropertyChanged
     public void Replace(RunRecord r)
     {
         Record = r;
-        foreach (string p in new[] { nameof(Dungeon), nameof(Character), nameof(Difficulty), nameof(XpText),
+        foreach (string p in new[] { nameof(Dungeon), nameof(Character), nameof(Difficulty), nameof(Party), nameof(XpText),
             nameof(CharLevelText), nameof(LevelText), nameof(Entered), nameof(Duration), nameof(XpPerMinute), nameof(Completed), nameof(Status), nameof(XpMissing) })
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
     }

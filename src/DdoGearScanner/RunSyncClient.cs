@@ -60,6 +60,7 @@ public sealed class RunSyncClient
         characterLevel = r.CharacterLevel,
         dungeonName = r.DungeonName,
         difficulty = r.Difficulty,
+        party = r.Party,
         questLevel = r.QuestLevel,
         questDuration = r.QuestDuration,
         enteredUtc = Iso(r.EnteredUtc),
@@ -171,7 +172,8 @@ public sealed class RunSyncClient
             QuestDuration: Str(e, "questDuration"),
             Paused: false,
             PausedUtc: null,
-            Synced: true);
+            Synced: true,
+            Party: Str(e, "party"));
     }
 
     private static string? Str(JsonElement e, string name)

@@ -98,6 +98,12 @@ public sealed class AppSettings : INotifyPropertyChanged
     private bool _showRunHud = true;
     public bool ShowRunHud { get => _showRunHud; set => Set(ref _showRunHud, value); }
 
+    // Sticky solo/group default: party is manual (never OCR'd), so each auto-captured run is stamped with the
+    // LAST party you set, and editing a run's party updates this. Defaults to "solo"; rides forward until you
+    // flip it. Only ever "solo" or "group" — legacy (pre-feature) runs stay null, which this never overwrites.
+    private string _lastParty = "solo";
+    public string LastParty { get => _lastParty; set => Set(ref _lastParty, value); }
+
     // Gear capture: draw the calibrated slot markers on the game while a detection session is active,
     // and an explicit "inventory not located" hint when the paper-doll can't be found — so a moved
     // inventory window / different UI scale fails VISIBLY instead of silently skipping every capture.

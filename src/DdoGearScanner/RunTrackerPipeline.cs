@@ -1018,13 +1018,17 @@ public sealed class RunTrackerPipeline
         }
     }
 
+    // The remembered solo/group default for a fresh run — "group" only when explicitly last set to it, else "solo".
+    private static string StickyParty() => AppSettings.Instance.LastParty == "group" ? "group" : "solo";
+
     private RunRecord NewRun(string name)
     {
         _leftTicks = 0;   // fresh "am I still in my quest?" streak for the new run
         (string? id, int? level) = _character();
-        // Stamp the auto-detected character name + level (from the avatar region) when available.
+        // Stamp the auto-detected character name + level (from the avatar region) when available, plus the sticky
+        // solo/group default (party is manual — never OCR'd — so it rides the last value you set).
         return new RunRecord(RunRecord.NewId(), name, null, _detectedLevel ?? level, id, DateTime.UtcNow, null, null,
-            false, string.Empty, false, null, _detectedName);
+            false, string.Empty, false, null, _detectedName, Party: StickyParty());
     }
 
     private static Rect RegionRect(OpenCvMat frame, RegionRatios r)

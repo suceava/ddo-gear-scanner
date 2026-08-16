@@ -153,6 +153,7 @@
                 </DataGridTextColumn>
                 <DataGridTextColumn Header="Char Lvl" Binding="{Binding CharLevelText}" Width="62" />
                 <DataGridTextColumn Header="Difficulty" Binding="{Binding Difficulty}" Width="82" />
+                <DataGridTextColumn Header="Party" Binding="{Binding Party}" Width="58" IsReadOnly="True" />
                 <DataGridTextColumn Header="Lvl" Binding="{Binding LevelText}" Width="46" />
                 <DataGridTemplateColumn Header="XP" Width="86">
                     <DataGridTemplateColumn.CellTemplate>

@@ -30,10 +30,12 @@
             </StackPanel>
         </Grid>
 
-        <!-- Difficulty + Quest lvl -->
+        <!-- Difficulty + Party + Quest lvl -->
         <Grid Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="12" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
@@ -44,6 +46,11 @@
                 <ComboBox x:Name="DifficultyBox" Margin="0,2,0,0" />
             </StackPanel>
             <StackPanel Grid.Column="2">
+                <TextBlock Text="Party" Foreground="{StaticResource TextMuted}" FontSize="12" />
+                <!-- Solo/group is MANUAL (never OCR'd); "—" clears it. Same non-editable pick list. -->
+                <ComboBox x:Name="PartyBox" Width="90" Margin="0,2,0,0" />
+            </StackPanel>
+            <StackPanel Grid.Column="4">
                 <TextBlock Text="Quest lvl" Foreground="{StaticResource TextMuted}" FontSize="12" />
                 <TextBox x:Name="LevelBox" Width="64" Margin="0,2,0,0" MaxLength="2"
                          PreviewTextInput="Digits_PreviewTextInput" DataObject.Pasting="Digits_Pasting" />
