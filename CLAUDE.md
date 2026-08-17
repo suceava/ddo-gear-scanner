@@ -201,6 +201,13 @@ fast and survives a backend outage). With no key it's purely local. Both directi
   name = OCR'd name, else the active profile, else "Unknown"). `[sync]` log lines trace pushes/pulls/deletes.
 - **Status** shows live in the Run tracker control bar — ☁ Sync off / Syncing N… / Synced / Sync error
   (`RunSyncService.StatusChanged` → `RunTrackerView.SetSyncStatus`). That's the user-facing "did it work".
+- **Same-machine live push to the WEB** (`LocalSignalServer`): a loopback HTTP server on `127.0.0.1:17429`
+  (same `HttpListener` recipe as `DeviceLinkService`) serving `GET /runs-signal → {"v":N}`. `RunSyncService`
+  **bumps N after each successful push/delete** (via the `onServerChanged` callback wired in `App`). The web app,
+  running on the same PC, polls this LOCAL endpoint (free — never AWS) and refetches its runs only when N
+  changes — so a finished run appears on the site with no manual refresh and **no AWS polling** (the reason we
+  avoided a websocket/timer). Bound to 127.0.0.1 only; responses carry CORS + `Access-Control-Allow-Private-
+  Network: true` so a deployed HTTPS page can `fetch()` it (Chrome PNA).
 
 ## Debug system
 

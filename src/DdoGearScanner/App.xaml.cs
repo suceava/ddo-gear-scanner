@@ -11,6 +11,7 @@ public partial class App : Application
     // active-run.json, and the sync outbox — producing phantom/double-logged runs. Held for the process
     // lifetime; auto-released on exit (an abandoned one from a crash is reclaimed by the next launch).
     private Mutex? _singleInstance;
+    private LocalSignalServer? _signalServer;
     // Default capture hotkey (self-heal target): Insert. A normal key that fires WM_HOTKEY reliably
     // (unlike lock keys ScrollLock/Pause), DDO-free.
     private const uint DefaultHotkeyMod = 0;
@@ -59,6 +60,11 @@ public partial class App : Application
         }
 
         AppSettings settings = AppSettings.Instance;
+
+        // Same-machine live-update: a loopback signal the web app polls locally (no AWS) — bumped after each run
+        // push so the site refetches only on a real new run. Best-effort (port taken / not signed in → just off).
+        _signalServer = new LocalSignalServer();
+        _signalServer.Start();
 
         // Web-centric: DDO Companion is an ingestion client for your account, so it requires sign-in to run.
         // Validate the stored key (GET /me) and, if there's no key or it's been revoked, block on the login
@@ -125,7 +131,7 @@ public partial class App : Application
             run => !string.IsNullOrWhiteSpace(run.CharacterName)
                 ? run.CharacterName!
                 : charStore.Profiles.FirstOrDefault(p => p.Id == run.CharacterId)?.Name ?? "Unknown");
-        _runSync = new RunSyncService(runStore, syncClient);
+        _runSync = new RunSyncService(runStore, syncClient, () => _signalServer?.Bump());
         // Push every character's equipped loadout (the web planner reads it) — on startup + on gear change.
         // The loadout push provisions the character server-side, so the desktop keeps NO synced character
         // list: characters are derived on the server from runs + loadouts (a web delete now stays deleted).
@@ -308,6 +314,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _signalServer?.Dispose();
         _runSync?.Dispose();
         _loadoutSync?.Dispose();
         _trigger?.Dispose();

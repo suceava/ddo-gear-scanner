@@ -22,6 +22,7 @@ public sealed class RunSyncService : IDisposable
 
     private readonly RunStore _store;
     private readonly RunSyncClient _client;
+    private readonly Action? _onServerChanged; // fired after runs are pushed/deleted → the web polls this to refetch
     private readonly SemaphoreSlim _drainGate = new(1, 1);
     private readonly System.Timers.Timer _periodic;
     private volatile bool _drainRequested;
@@ -36,10 +37,11 @@ public sealed class RunSyncService : IDisposable
         StatusChanged?.Invoke(s);
     }
 
-    public RunSyncService(RunStore store, RunSyncClient client)
+    public RunSyncService(RunStore store, RunSyncClient client, Action? onServerChanged = null)
     {
         _store = store;
         _client = client;
+        _onServerChanged = onServerChanged;
         _store.RunSaved += OnRunSaved;
         _store.RunRemoved += OnRunRemoved;
 
@@ -60,7 +62,13 @@ public sealed class RunSyncService : IDisposable
     private void OnRunSaved(RunRecord run) => TriggerDrain();
 
     // Best-effort: if the delete fails the run is orphaned server-side (rare; a later cleanup could sweep it).
-    private void OnRunRemoved(string id) => _ = _client.DeleteAsync(id);
+    private void OnRunRemoved(string id) => _ = DeleteAndSignalAsync(id);
+
+    private async Task DeleteAndSignalAsync(string id)
+    {
+        await _client.DeleteAsync(id).ConfigureAwait(false);
+        _onServerChanged?.Invoke(); // the run is gone server-side → tell the web to refetch
+    }
 
     private void TriggerDrain() => _ = DrainAsync();
 
@@ -97,6 +105,7 @@ public sealed class RunSyncService : IDisposable
                         return; // leave unsynced; the periodic timer / next save retries
                     }
                     foreach (RunRecord r in chunk) _store.MarkSynced(r.Id);
+                    _onServerChanged?.Invoke(); // new runs are on the server now → tell the web to refetch
                 }
             } while (_drainRequested);
 
