@@ -142,6 +142,11 @@ public partial class App : Application
             {
                 _runSync?.Start();
                 _loadoutSync?.Start();
+                _ = syncClient.PushLlmKeyAsync(settings.OpenRouterApiKey); // just connected → carry the LLM key up too
+            }
+            else if (e.PropertyName == nameof(AppSettings.OpenRouterApiKey))
+            {
+                _ = syncClient.PushLlmKeyAsync(settings.OpenRouterApiKey); // OCR key changed → keep the account's copy in sync
             }
         };
 
@@ -170,6 +175,8 @@ public partial class App : Application
         _runSync.StatusChanged += main.Run.SetSyncStatus;
         _runSync.Start();
         _loadoutSync.Start();
+        // Carry the OpenRouter (OCR) key up to the account so the web recommender shares it — "enter once".
+        _ = syncClient.PushLlmKeyAsync(settings.OpenRouterApiKey);
         main.Gear.DetectionToggleRequested += () => pipeline.ToggleSession();
         main.Gear.CalibrateRequested += () => { if (calibration.Active) calibration.Cancel(); else calibration.Start(); };
 

@@ -278,6 +278,26 @@ public sealed class RunSyncClient
         catch (Exception ex) { Log($"loadout push failed: {ex.GetType().Name}: {ex.Message}"); return false; }
     }
 
+    /// <summary>Push the user's OpenRouter (LLM) key to the account (POST /llm-key) so the web recommender can
+    /// use the same key they already entered here for OCR — "enter once". Idempotent (replaces). Best-effort;
+    /// tagged `source=desktop` server-side by the api-key auth. No-op if the key is blank.</summary>
+    public async Task<bool> PushLlmKeyAsync(string llmKey, CancellationToken ct = default)
+    {
+        SyncConfig? cfg = _config();
+        if (cfg is null || cfg.ApiKey.Length == 0 || string.IsNullOrWhiteSpace(llmKey)) return false;
+        try
+        {
+            object body = new { key = llmKey.Trim() };
+            using HttpRequestMessage req = Authed(HttpMethod.Post, cfg, "/llm-key");
+            req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+            using HttpResponseMessage resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode) { Log($"llm-key push HTTP {(int)resp.StatusCode}"); return false; }
+            Log("pushed llm-key");
+            return true;
+        }
+        catch (Exception ex) { Log($"llm-key push failed: {ex.GetType().Name}: {ex.Message}"); return false; }
+    }
+
     private static string Truncate(string s, int n)
     {
         s = s.Replace("\r", "").Replace('\n', ' ');
