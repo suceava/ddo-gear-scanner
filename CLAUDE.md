@@ -237,9 +237,12 @@ bake-off corpus flag, was the confusing mess this replaced.
 
 **Detection: local Windows OCR for polling; optional LLM (OpenRouter) for EVENT reads.** All OCR goes
 through the `IOcrEngine` seam (a 2026-07 bake-off on real gameplay kept Windows OCR and rejected
-Tesseract/Paddle — see `tools/OcrBakeoff`). With **AI reading** enabled (☰ → Settings — a USER setting:
-`LlmEnabled` + OpenRouter API key (plaintext by choice) + model, default `google/gemini-2.5-flash`),
-event moments go to a vision LLM and override the local read when they land: gear TOOLTIPS
+Tesseract/Paddle — see `tools/OcrBakeoff`). With an **OpenRouter key set** (☰ → Settings — a USER setting;
+**the key IS the enable switch**, no separate toggle: a stored key turns AI on, clear it to turn off), event
+moments go to a vision LLM and override the local read when they land. The key is **shared with the web
+account** (auto-pushed via `POST /llm-key`; powers the web loadout recommender too); the **model** is a
+**local** setting (this machine's vision model, default `google/gemini-2.5-flash`), not shared. Event reads:
+gear TOOLTIPS
 (`OpenRouterTooltipReader` → whole structured GearItem in one shot, falls back to local on any failure),
 the quest ENTRY POPUP (one call per popup; LLM owns name/level/duration, difficulty stays live-local),
 and the AVATAR (one call per character key — a set, so OCR-jitter variants can't re-trigger; the

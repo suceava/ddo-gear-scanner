@@ -114,9 +114,6 @@ public sealed class AppSettings : INotifyPropertyChanged
     // captures, the quest-entry popup, the character avatar) go through an LLM vision model and override
     // the local-OCR result when they land; the 3/sec tracker+chat polling always stays on local OCR
     // (cost/latency). Key is stored plaintext by explicit user choice. Off by default.
-    private bool _llmEnabled;
-    public bool LlmEnabled { get => _llmEnabled; set => Set(ref _llmEnabled, value); }
-
     private string _openRouterApiKey = string.Empty;
     public string OpenRouterApiKey { get => _openRouterApiKey; set => Set(ref _openRouterApiKey, value); }
 
@@ -289,7 +286,6 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.ActivePage = loaded.ActivePage ?? "Home";
                     s.AutoOpenWiki = loaded.AutoOpenWiki;
                     s.ShowSlotMarkers = loaded.ShowSlotMarkers;
-                    s.LlmEnabled = loaded.LlmEnabled;
                     s.OpenRouterApiKey = loaded.OpenRouterApiKey ?? string.Empty;
                     s.OpenRouterModel = string.IsNullOrWhiteSpace(loaded.OpenRouterModel) ? s.OpenRouterModel : loaded.OpenRouterModel;
                     // Sync key: prefer the encrypted blob; fall back to (and migrate) any legacy plaintext.

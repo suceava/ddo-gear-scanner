@@ -87,11 +87,11 @@ public partial class App : Application
         // 2026-07 engine bake-off (Tesseract/Paddle lost on real gameplay and were removed).
         LocalOcr ocr = new();
 
-        // AI reading (OpenRouter) — USER setting, app-wide. The config provider reads live settings, so
-        // toggling it in Settings applies immediately, no restart. Event reads only: gear tooltips (below),
-        // quest-entry popup + avatar (run pipeline); polling stays on local OCR.
+        // AI reading (OpenRouter) — USER setting, app-wide. A stored key IS the enable switch (clear it to turn
+        // AI off); the config provider reads live settings, so it applies immediately, no restart. Event reads
+        // only: gear tooltips (below), quest-entry popup + avatar (run pipeline); polling stays on local OCR.
         OpenRouterClient llmClient = new(() =>
-            settings.LlmEnabled && !string.IsNullOrWhiteSpace(settings.OpenRouterApiKey)
+            !string.IsNullOrWhiteSpace(settings.OpenRouterApiKey)
                 ? new OpenRouterConfig(settings.OpenRouterApiKey.Trim(), settings.OpenRouterModel.Trim())
                 : null);
         ITooltipReader reader = new OpenRouterTooltipReader(llmClient, new LocalOcrTooltipReader(ocr));
