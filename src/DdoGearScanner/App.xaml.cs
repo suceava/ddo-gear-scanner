@@ -159,6 +159,8 @@ public partial class App : Application
         // restored on startup, then follow the live signal.
         runPipeline.CurrentChanged += overlay.SetCurrentRun;
         overlay.SetCurrentRun(runPipeline.Current);
+        // Also preview the quest in the HUD the moment the entry popup is detected (before the run starts).
+        runPipeline.EntryHeld += overlay.SetPendingEntry;
 
         // The "DDO Companion" shell hosts the Loadout + Runs pages; App routes the
         // gear/run pipeline events to the embedded views via main.Gear / main.Run.

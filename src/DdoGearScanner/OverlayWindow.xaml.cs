@@ -7,6 +7,7 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using DdoGearScanner.Capture;
 using DdoGearScanner.Model;
+using DdoGearScanner.Vision;
 
 namespace DdoGearScanner;
 
@@ -32,6 +33,9 @@ public partial class OverlayWindow : Window
     // run stays up (kept while you're in the quest, then a grace period after you leave), so the HUD just follows
     // `_current` — it shows whatever the pipeline hands it and hides when the pipeline clears it.
     private RunRecord? _hudRun;
+    // A quest-entry popup seen but not yet entered — previewed in the HUD ("ready", no live timer) so the readout
+    // appears the moment the app detects the quest, not only once the run is in progress. A live run outranks it.
+    private QuestEntry? _hudEntry;
 
     public OverlayWindow()
     {
@@ -236,13 +240,30 @@ public partial class OverlayWindow : Window
         RefreshRunHud();
     });
 
+    /// <summary>Feed the mini readout the quest-entry popup (the run tracker's <c>EntryHeld</c>) so it previews
+    /// the quest the moment the popup is detected — before the run starts. A live run (SetCurrentRun) outranks
+    /// it; passing null clears the preview (popup cancelled/consumed).</summary>
+    public void SetPendingEntry(QuestEntry? entry) => Dispatcher.Invoke(() =>
+    {
+        _hudEntry = entry;
+        RefreshRunHud();
+    });
+
     private void RefreshRunHud()
     {
-        if (_hudRun is not { } r || !AppSettings.Instance.ShowRunHud)
+        if (!AppSettings.Instance.ShowRunHud)
         {
             RunHudBorder.Visibility = Visibility.Collapsed;
             return;
         }
+        if (_hudRun is { } r) { ShowRunHud(r); return; }      // live/finished run wins
+        if (_hudEntry is { } e) { ShowEntryHud(e); return; }  // else preview the detected popup
+        RunHudBorder.Visibility = Visibility.Collapsed;
+    }
+
+    // Live/finished run: dot + name + difficulty + running timer (+ XP at completion).
+    private void ShowRunHud(RunRecord r)
+    {
         bool done = r.Completed, paused = r.Paused;
         bool warn = r.XpMissing; // completed but XP never read — the time-sensitive miss (chat scrolls away)
         RunHudDot.Fill = warn ? HudWarn : done ? HudGreen : paused ? HudAmber : HudLive;
@@ -263,6 +284,23 @@ public partial class OverlayWindow : Window
             RunHudXp.Visibility = Visibility.Visible;
         }
         else RunHudXp.Visibility = Visibility.Collapsed;
+        RunHudBorder.Visibility = Visibility.Visible;
+    }
+
+    // Quest-entry popup detected (not yet entered): preview the quest that's about to start — name + difficulty +
+    // level, an amber "ready" dot, and "ready" where the live timer will appear. Hands off to ShowRunHud on start.
+    private void ShowEntryHud(QuestEntry e)
+    {
+        RunHudDot.Fill = HudAmber;
+        RunHudBorder.BorderBrush = HudGold;
+        RunHudName.Text = string.IsNullOrWhiteSpace(e.Name) ? "(quest)" : e.Name;
+        string diff = string.IsNullOrWhiteSpace(e.Difficulty) ? "" : e.Difficulty!;
+        string lvl = e.QuestLevel is { } l ? $"L{l}" : "";
+        string tail = diff;
+        if (lvl.Length > 0) tail = tail.Length > 0 ? $"{tail} · {lvl}" : lvl;
+        RunHudDiff.Text = tail.Length > 0 ? "· " + tail : "";
+        RunHudTimer.Text = "ready";
+        RunHudXp.Visibility = Visibility.Collapsed;
         RunHudBorder.Visibility = Visibility.Visible;
     }
 

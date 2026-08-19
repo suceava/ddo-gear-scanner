@@ -129,6 +129,17 @@ public partial class RunTrackerView : UserControl
         _current = current;
         if (current is not null) _heldEntry = null;   // run started → the held popup was consumed
 
+        // A completed run lingers on the card, and its XP can be back-filled AFTER finalize (the LLM chat read
+        // recovers XP local OCR missed — including a legit 0, e.g. an over-level epic quest). That updates the
+        // store, but the history row was inserted at finalize time and only reloads on a store `Changed` (web
+        // pull), NOT on `Update`. So refresh the matching row here — otherwise a recovered 0 leaves the row +
+        // review queue stuck on "⚠ missing" while the card correctly shows 0.
+        if (current is { Completed: true } done)
+        {
+            RunRow? row = _rows.FirstOrDefault(r => r.Record.Id == done.Id);
+            if (row is not null && !row.Record.Equals(done)) { row.Replace(done); UpdateXpWarnQueue(); }
+        }
+
         // Auto-open the quest's wiki page once per NEW run, if the setting is on (default off).
         if (current is { Completed: false } run && run.Id != _autoOpenedRunId
             && AppSettings.Instance.AutoOpenWiki && !string.IsNullOrWhiteSpace(run.DungeonName))

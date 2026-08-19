@@ -116,7 +116,11 @@ all pure parsing is in `Vision/RunTextParser.cs` (unit-tested in `RunTrackerTest
   "Adventure Completed" appearing in the chat (robust to a fast, noisy combat chat where line-shift
   alignment fails; baselined per-run so a stale message can't fire it).
 - **XP** only ever appears in chat ("You receive N XP") — captured every read and stamped at finalize,
-  whichever signal completed the run.
+  whichever signal completed the run. A **legit 0** (over-level epic/talk-to-NPC quests) is a real result,
+  not a miss (`XpMissing` = completed AND `Xp is null`, so 0 never flags). If local OCR missed it, the LLM
+  chat read **back-fills** XP during the completed-card linger; that updates the store + card, so the history
+  row + "⚠ missing" queue are refreshed from `OnCurrentChanged` (the grid otherwise only reloads on a store
+  `Changed`, not an `Update`) — else a recovered 0 would leave the row stuck on "missing".
 - **Character** = the **avatar region** (`CharacterReader`): name reads on the plain OCR; the level pip
   ("20") sits over the portrait so a second **bright-text threshold pass** recovers it.
 
@@ -131,6 +135,11 @@ spot) needs a manual **Start**; wilderness/normal quests all show their title. *
 "Slayer: <area> Menaces" counter, not a quest title, so they no longer auto-start (the counter never
 matches the quest name); the across-all-lines Slayer check still **discards** one if it slips through.
 Character name+level are OCR'd while idle, cached, and stamped onto the run at start.
+
+**In-game mini HUD** (`OverlayWindow`, bottom-right): **previews the quest the moment the entry popup is
+detected** (name / difficulty / level, "ready" — follows `EntryHeld`), then hands off to the live timer once
+the run starts and shows the result + XP at completion (follows `CurrentChanged`). A live run outranks the
+preview; toggled by the "show run HUD" setting.
 
 **Game closed/minimized → auto-pause** (frame-starvation watchdog): the capture frame stream is the
 game-alive heartbeat. A timer (every 10s) auto-**pauses** a live, un-paused run when no frame has arrived
