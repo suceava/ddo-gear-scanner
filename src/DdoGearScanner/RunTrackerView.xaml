@@ -46,6 +46,11 @@
                         Click="Settings_Click" VerticalAlignment="Center" Margin="0,0,12,0" />
                 <Button x:Name="CalibrateRunButton" DockPanel.Dock="Right" Content="Calibrate Run Regions"
                         Click="CalibrateRun_Click" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <!-- Multi-boxing: shown ONLY when more than one DDO client is detected. Tracking auto-locks the
+                     first client; this cycles the lock to the next if it picked the wrong one. -->
+                <Button x:Name="SwitchClientButton" DockPanel.Dock="Right" Content="⇄ Switch client"
+                        Click="SwitchClient_Click" VerticalAlignment="Center" Margin="0,0,12,0" Visibility="Collapsed"
+                        ToolTip="Multiple DDO clients detected — switch which one this tracks" />
                 <!-- Cloud-sync status (answers "did my runs sync?" at a glance). Set live from RunSyncService. -->
                 <TextBlock x:Name="SyncStatusText" DockPanel.Dock="Left" VerticalAlignment="Center"
                            FontSize="12.5" Foreground="{StaticResource TextMuted}" Text="☁ Sync off"

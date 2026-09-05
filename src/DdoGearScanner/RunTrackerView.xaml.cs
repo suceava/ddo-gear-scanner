@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using DdoGearScanner.Capture;
 using DdoGearScanner.Model;
 using DdoGearScanner.Vision;
 
@@ -24,6 +25,7 @@ public partial class RunTrackerView : UserControl
 {
     private readonly RunStore _store;
     private readonly RunTrackerPipeline _pipeline;
+    private readonly GameWindowTracker? _tracker;   // null-safe: multi-client UI just stays hidden without it
     private readonly ObservableCollection<RunRow> _rows = new();
     private readonly DispatcherTimer _elapsedTimer;
 
@@ -52,11 +54,19 @@ public partial class RunTrackerView : UserControl
         SyncStatusText.ToolTip = tip;
     });
 
-    public RunTrackerView(RunStore store, CharacterStore charStore, RunTrackerPipeline pipeline, AppSettings settings)
+    public RunTrackerView(RunStore store, CharacterStore charStore, RunTrackerPipeline pipeline, AppSettings settings, GameWindowTracker? tracker = null)
     {
         InitializeComponent();
         _store = store;
         _pipeline = pipeline;
+        _tracker = tracker;
+
+        // Multi-client control: the "Switch client" button appears only when >1 DDO window is detected.
+        if (_tracker is not null)
+        {
+            _tracker.TrackedWindowsChanged += OnTrackedWindowsChanged;
+            UpdateSwitchClient();
+        }
 
         Grid.ItemsSource = _rows;
         LoadRuns();
@@ -76,6 +86,27 @@ public partial class RunTrackerView : UserControl
         _elapsedTimer.Start();
         UpdateCurrentStatus();
     }
+
+    private void OnTrackedWindowsChanged() => Dispatcher.BeginInvoke(UpdateSwitchClient);
+
+    /// <summary>Show the "Switch client" button only when multiple DDO clients are detected, labeled with which
+    /// one is currently tracked (N of M).</summary>
+    private void UpdateSwitchClient()
+    {
+        if (_tracker is null) return;
+        (int number, int count) = _tracker.TrackedWindowInfo;
+        if (count > 1)
+        {
+            SwitchClientButton.Content = $"⇄ Switch client ({number}/{count})";
+            SwitchClientButton.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            SwitchClientButton.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void SwitchClient_Click(object sender, RoutedEventArgs e) => _tracker?.CycleTrackedWindow();
 
     /// <summary>Reload the grid for whichever character is active. Called on first load, on Refresh,
     /// when the shell navigates to this page, and when the active character changes in the shell.</summary>

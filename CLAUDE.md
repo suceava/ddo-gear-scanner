@@ -147,6 +147,19 @@ for `FrameStarveMs`=45s (Windows.Graphics.Capture delivers nothing for a gone/mi
 never runs and the timer would otherwise count forever). Same freeze as a manual pause; restore-on-startup
 brings it back paused so you Resume / Complete / Cancel.
 
+**Multi-client window lock** (`GameWindowTracker`): with several DDO clients open (multi-boxing), the tracker
+must not follow whichever one is focused. It enumerates DDO windows in a STABLE order (by process id, not
+Z-order), **auto-locks the first**, and holds that handle regardless of focus — a focus switch to another
+client is now no different from alt-tabbing to any other app. If the locked window closes it **auto-relocks**
+to the first remaining client. `CycleTrackedWindow()` moves the lock to the next client; the run-tracker view
+surfaces a **"⇄ Switch client (N/M)"** button that shows ONLY when >1 client is detected (via the
+`TrackedWindowsChanged` event). WGC captures the locked window even while it's in the background, so the
+non-focused clients keep being ignored and the tracked one keeps reading.
+
+**Completed-card yields to a new quest** — while a finished run's card lingers (see the completed-card linger
+below), if a DIFFERENT quest's entry popup appears the card is dropped immediately (bypassing the min-show
+floor) so the next run isn't missed during the linger; the finished run is already saved, so nothing is lost.
+
 **"Left the dungeon" = the tracker no longer shows THIS run's quest** (`TrackerShowsQuest`: fuzzy match
 of the run's clean popup-sourced name against every tracker line, ≤40% edit distance, debounced
 `LeftDebounce`=15 non-blank reads). This became viable only after a CALIBRATION fix: the quest-name title

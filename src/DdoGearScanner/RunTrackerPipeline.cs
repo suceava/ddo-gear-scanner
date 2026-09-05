@@ -680,25 +680,45 @@ public sealed class RunTrackerPipeline
                 }
                 else if (cur.Completed)
                 {
-                    // Already recorded — keep the finished run on the card/HUD WHILE you're in the quest, then
-                    // linger a grace period after you leave. "Out of the quest" = the left-by-name signal fired
-                    // OR the tracker blanked (loading out — completing often ports you elsewhere); track when
-                    // that first happened so the grace runs from the leave, not from completion. Clear once past
-                    // the min-show floor AND (the post-leave grace elapsed OR the hard max is hit).
-                    bool outOfQuest = left || name is null;
-                    if (outOfQuest) { if (_completedLeftMs == 0) _completedLeftMs = nowTick; }
-                    else _completedLeftMs = 0;   // still (or back) inside → reset the leave clock
-                    double sinceCompleted = cur.CompletedUtc is { } cu ? (DateTime.UtcNow - cu).TotalSeconds : 0;
-                    bool graceElapsed = _completedLeftMs != 0 && nowTick - _completedLeftMs >= CompletedLeaveGraceMs;
-                    bool doneShowing = sinceCompleted >= CompletedCardMinSeconds
-                        && (graceElapsed || sinceCompleted >= CompletedCardMaxSeconds);
-                    if (doneShowing)
+                    // A DIFFERENT quest's entry popup is up while the finished run's card still lingers → you've
+                    // moved on to the next quest. Yield the card NOW (bypass the min-show floor) so the entry gate
+                    // can start the new run instead of it being missed during the linger. The finished run is
+                    // already saved, so dropping the card loses nothing. (Same-quest popup keeps lingering — the
+                    // no-active-run gate's own lingering guard handles a re-run.)
+                    bool newQuestPopup = _pendingEntry is { } pe
+                        && nowTick - _pendingEntryTick < PopupGoneMs
+                        && !NameEq(pe.Name, cur.DungeonName);
+                    if (newQuestPopup)
                     {
+                        Log($"completed card yields to new entry popup \"{_pendingEntry!.Name}\"");
                         _current = null;
                         _completedLeftMs = 0;
-                        _sawEmptySinceFinalize = true;
+                        _sawEmptySinceFinalize = true;   // don't let the lingering guard block the new run
                         currentChanged = true;
                         currentSnapshot = null;
+                    }
+                    else
+                    {
+                        // Already recorded — keep the finished run on the card/HUD WHILE you're in the quest, then
+                        // linger a grace period after you leave. "Out of the quest" = the left-by-name signal fired
+                        // OR the tracker blanked (loading out — completing often ports you elsewhere); track when
+                        // that first happened so the grace runs from the leave, not from completion. Clear once past
+                        // the min-show floor AND (the post-leave grace elapsed OR the hard max is hit).
+                        bool outOfQuest = left || name is null;
+                        if (outOfQuest) { if (_completedLeftMs == 0) _completedLeftMs = nowTick; }
+                        else _completedLeftMs = 0;   // still (or back) inside → reset the leave clock
+                        double sinceCompleted = cur.CompletedUtc is { } cu ? (DateTime.UtcNow - cu).TotalSeconds : 0;
+                        bool graceElapsed = _completedLeftMs != 0 && nowTick - _completedLeftMs >= CompletedLeaveGraceMs;
+                        bool doneShowing = sinceCompleted >= CompletedCardMinSeconds
+                            && (graceElapsed || sinceCompleted >= CompletedCardMaxSeconds);
+                        if (doneShowing)
+                        {
+                            _current = null;
+                            _completedLeftMs = 0;
+                            _sawEmptySinceFinalize = true;
+                            currentChanged = true;
+                            currentSnapshot = null;
+                        }
                     }
                 }
                 // Completion: the chat log's "Adventure Completed" (reliable, persistent) or the tracker's

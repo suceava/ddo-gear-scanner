@@ -169,7 +169,7 @@ public partial class App : Application
 
         // The "DDO Companion" shell hosts the Loadout + Runs pages; App routes the
         // gear/run pipeline events to the embedded views via main.Gear / main.Run.
-        ShellWindow main = new(store, charStore, runStore, runPipeline, settings, reader.IsAvailable);
+        ShellWindow main = new(store, charStore, runStore, runPipeline, settings, reader.IsAvailable, _tracker);
         // Cloud-sync status shows in the Run tracker's control bar; subscribe before the first drain so the
         // initial state paints, then kick off a drain of anything unsynced from a previous session.
         _runSync.StatusChanged += main.Run.SetSyncStatus;

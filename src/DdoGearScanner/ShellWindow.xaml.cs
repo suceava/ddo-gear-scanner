@@ -33,7 +33,7 @@ public partial class ShellWindow : Window
     private readonly HomeView _home;
 
     public ShellWindow(CaptureStore captureStore, CharacterStore charStore, RunStore runStore,
-        RunTrackerPipeline runPipeline, AppSettings settings, bool ocrAvailable)
+        RunTrackerPipeline runPipeline, AppSettings settings, bool ocrAvailable, DdoGearScanner.Capture.GameWindowTracker? tracker = null)
     {
         InitializeComponent();
         WindowChrome.UseDarkTitleBar(this);
@@ -50,7 +50,7 @@ public partial class ShellWindow : Window
         });
 
         Gear = new GearLoadoutView(captureStore, charStore, settings, ocrAvailable);
-        Run = new RunTrackerView(runStore, charStore, runPipeline, settings);
+        Run = new RunTrackerView(runStore, charStore, runPipeline, settings, tracker);
         _home = new HomeView();
         _home.NavigateGear += ShowGear;
         _home.NavigateRun += ShowRun;

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 
 namespace DdoGearScanner.Capture;
@@ -46,8 +47,49 @@ public sealed class GameWindowTracker : IDisposable
     private GameWindowRect? _lastRect;
     private bool _disposed;
 
+    // Multi-client: we LOCK onto one DDO window and hold it regardless of focus (so multi-boxing doesn't yank
+    // capture to whichever client is foreground). Auto-locks the first client found; auto-relocks to the first
+    // remaining one if the locked window closes. CycleTrackedWindow() moves the lock to the next client.
+    private IntPtr _lockedHandle = IntPtr.Zero;
+    private List<WindowInfo> _lastGames = new();   // stable-ordered DDO windows from the last poll (for cycling)
+    private int _gameWindowCount;
+
     public event Action<IntPtr, GameWindowRect>? GameWindowChanged;
     public event Action? GameWindowLost;
+    /// <summary>Fires (on the poll thread) when the number of DDO windows or the locked window changes — the UI
+    /// uses it to show/hide and label the "Switch client" control.</summary>
+    public event Action? TrackedWindowsChanged;
+
+    /// <summary>Number of DDO client windows currently detected.</summary>
+    public int GameWindowCount { get { lock (_lock) { return _gameWindowCount; } } }
+
+    /// <summary>1-based position of the locked window among the detected clients, plus the total (0 when none).
+    /// Powers the "Switch client (N of M)" label.</summary>
+    public (int Number, int Count) TrackedWindowInfo
+    {
+        get
+        {
+            lock (_lock)
+            {
+                int idx = _lastGames.FindIndex(g => g.Handle == _lockedHandle);
+                return (idx >= 0 ? idx + 1 : 0, _lastGames.Count);
+            }
+        }
+    }
+
+    /// <summary>Move the lock to the NEXT detected client (wraps). No-op with 0/1 clients. The next poll switches
+    /// capture and raises the change events.</summary>
+    public void CycleTrackedWindow()
+    {
+        lock (_lock)
+        {
+            if (_lastGames.Count <= 1) return;
+            int idx = _lastGames.FindIndex(g => g.Handle == _lockedHandle);
+            int next = ((idx < 0 ? 0 : idx) + 1) % _lastGames.Count;
+            _lockedHandle = _lastGames[next].Handle;
+            DebugLog.Write($"CycleTrackedWindow -> {next + 1}/{_lastGames.Count} handle=0x{_lockedHandle.ToInt64():X}");
+        }
+    }
 
     public void Start()
     {
@@ -63,40 +105,40 @@ public sealed class GameWindowTracker : IDisposable
 
     private void Poll()
     {
-        IntPtr handle;
-        GameWindowRect? rect;
+        List<WindowInfo> games;
         Exception? error = null;
-        try
-        {
-            handle = FindGameWindow();
-            rect = handle == IntPtr.Zero ? null : TryGetClientRect(handle);
-        }
-        catch (Exception ex)
-        {
-            handle = IntPtr.Zero;
-            rect = null;
-            error = ex;
-        }
-
-        int n = Interlocked.Increment(ref _pollCount);
-        if (error is not null)
-        {
-            DebugLog.Write($"Poll #{n} ERROR: {error.GetType().Name}: {error.Message}");
-        }
-        else if (n <= 5 || n % 40 == 0)
-        {
-            DebugLog.Write($"Poll #{n} handle=0x{handle.ToInt64():X} rect={rect?.ToString() ?? "null"}");
-        }
+        try { games = EnumerateGameWindows(); }
+        catch (Exception ex) { games = new(); error = ex; }
 
         Action? toRaise = null;
         Action<IntPtr, GameWindowRect>? toRaiseChanged = null;
+        Action? toRaiseWindows = null;
         IntPtr handleArg = IntPtr.Zero;
         GameWindowRect? rectArg = null;
+        IntPtr handle = IntPtr.Zero;
+        GameWindowRect? rect = null;
 
         lock (_lock)
         {
             if (_disposed) return;
 
+            // Choose the target: hold the locked window while it's still present; otherwise auto-lock the first
+            // client (also the auto-RELOCK path when the previously-locked window has closed).
+            IntPtr prevLocked = _lockedHandle;
+            if (_lockedHandle != IntPtr.Zero && !games.Any(g => g.Handle == _lockedHandle))
+                _lockedHandle = IntPtr.Zero;
+            if (_lockedHandle == IntPtr.Zero && games.Count > 0)
+                _lockedHandle = games[0].Handle;
+            handle = _lockedHandle;
+
+            _lastGames = games;
+            if (games.Count != _gameWindowCount || _lockedHandle != prevLocked)
+            {
+                _gameWindowCount = games.Count;
+                toRaiseWindows = TrackedWindowsChanged;
+            }
+
+            rect = handle == IntPtr.Zero ? null : TryGetClientRect(handle);
             if (rect is null)
             {
                 if (_trackedHandle != IntPtr.Zero)
@@ -106,22 +148,21 @@ public sealed class GameWindowTracker : IDisposable
                     toRaise = GameWindowLost;
                 }
             }
-            else
+            else if (handle != _trackedHandle || _lastRect != rect)
             {
-                bool handleChanged = handle != _trackedHandle;
-                bool rectChanged = _lastRect != rect;
-
-                if (handleChanged || rectChanged)
-                {
-                    _trackedHandle = handle;
-                    _lastRect = rect;
-                    toRaiseChanged = GameWindowChanged;
-                    handleArg = handle;
-                    rectArg = rect;
-                }
+                _trackedHandle = handle;
+                _lastRect = rect;
+                toRaiseChanged = GameWindowChanged;
+                handleArg = handle;
+                rectArg = rect;
             }
         }
 
+        int n = Interlocked.Increment(ref _pollCount);
+        if (error is not null) DebugLog.Write($"Poll #{n} ERROR: {error.GetType().Name}: {error.Message}");
+        else if (n <= 5 || n % 40 == 0) DebugLog.Write($"Poll #{n} handle=0x{handle.ToInt64():X} games={games.Count} rect={rect?.ToString() ?? "null"}");
+
+        if (toRaiseWindows is not null) toRaiseWindows.Invoke();
         if (toRaise is not null)
         {
             DebugLog.Write("Firing GameWindowLost");
@@ -149,28 +190,24 @@ public sealed class GameWindowTracker : IDisposable
         return (0, 0);
     }
 
-    private static IntPtr FindGameWindow()
+    private static bool IsGameWindow(WindowInfo w)
     {
-        List<WindowInfo> windows = EnumerateCandidateWindows();
+        foreach (string name in ProcessNames)
+            if (w.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)) return true;
+        return w.Title.Contains(TitleNeedle, StringComparison.OrdinalIgnoreCase);
+    }
 
-        // 1) Prefer a window owned by a known DDO client process.
-        foreach (WindowInfo w in windows)
+    /// <summary>All DDO client windows, in a STABLE order (by process id, then handle) — so "the first client"
+    /// and the cycle order don't shuffle as focus/Z-order changes.</summary>
+    private static List<WindowInfo> EnumerateGameWindows()
+    {
+        List<WindowInfo> games = EnumerateCandidateWindows().Where(IsGameWindow).ToList();
+        games.Sort((a, b) =>
         {
-            foreach (string name in ProcessNames)
-            {
-                if (w.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase))
-                    return w.Handle;
-            }
-        }
-
-        // 2) Fall back to any visible top-level window whose title looks like DDO.
-        foreach (WindowInfo w in windows)
-        {
-            if (w.Title.Contains(TitleNeedle, StringComparison.OrdinalIgnoreCase))
-                return w.Handle;
-        }
-
-        return IntPtr.Zero;
+            int c = a.ProcessId.CompareTo(b.ProcessId);
+            return c != 0 ? c : a.Handle.ToInt64().CompareTo(b.Handle.ToInt64());
+        });
+        return games;
     }
 
     /// <summary>Enumerate visible top-level windows that have a title. Surfaced for the
