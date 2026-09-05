@@ -11,8 +11,10 @@
         WindowStartupLocation="Manual"
         SizeToContent="Manual"
         Left="-32000" Top="-32000" Width="1" Height="1">
-    <Grid IsHitTestVisible="False">
-        <Canvas x:Name="HighlightCanvas">
+    <!-- Root is hit-testable so the run HUD can catch clicks/drag; every NON-interactive layer opts out below,
+         and the window-level WS_EX_TRANSPARENT toggle still gates input to only-when-over-the-HUD. -->
+    <Grid>
+        <Canvas x:Name="HighlightCanvas" IsHitTestVisible="False">
             <!-- Debug: persistent borders showing the calibrated run-tracker regions -->
             <Rectangle x:Name="DebugPopupBorder" Visibility="Collapsed" Stroke="#E6C66A" StrokeThickness="3" RadiusX="3" RadiusY="3" />
             <TextBlock x:Name="DebugPopupLabel" Visibility="Collapsed" Foreground="#E6C66A" FontFamily="Segoe UI"
@@ -32,6 +34,7 @@
         <!-- Gear capture feedback: shown while a session is on but the inventory paper-doll can't be
              located — the silent-failure case (moved window / different UI scale) made visible. -->
         <Border x:Name="SlotHintBorder"
+                IsHitTestVisible="False"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 Margin="0,84,0,0"
@@ -46,6 +49,7 @@
                        Foreground="White" Text="" />
         </Border>
         <Border x:Name="ToastBorder"
+                IsHitTestVisible="False"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Top"
                 Margin="0,24,0,0"
@@ -74,6 +78,8 @@
                 BorderThickness="1.5"
                 CornerRadius="6"
                 Padding="12,7"
+                Cursor="SizeAll"
+                MouseLeftButtonDown="RunHud_MouseDown"
                 Visibility="Collapsed">
             <StackPanel Orientation="Horizontal">
                 <Ellipse x:Name="RunHudDot" Width="9" Height="9" Margin="0,0,8,0" VerticalAlignment="Center" Fill="#FF35C26B" />
@@ -85,6 +91,10 @@
                            Foreground="#FFE6C66A" VerticalAlignment="Center" Margin="12,0,0,0" />
                 <TextBlock x:Name="RunHudXp" FontFamily="Segoe UI" FontSize="14" FontWeight="Bold"
                            Foreground="#FF8FCF8A" VerticalAlignment="Center" Margin="12,0,0,0" Visibility="Collapsed" />
+                <!-- Pause/Resume for the live run. Shown only while a run is active; label set in code (⏸/▶).
+                     Cursor overrides the box's SizeAll so it reads as a button; its click is excluded from drag. -->
+                <Button x:Name="HudPauseButton" Background="Transparent" BorderThickness="0" Padding="6,2" Margin="12,0,0,0"
+                        VerticalAlignment="Center" Cursor="Hand" Click="HudPause_Click" Visibility="Collapsed" />
             </StackPanel>
         </Border>
     </Grid>

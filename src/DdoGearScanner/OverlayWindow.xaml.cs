@@ -21,13 +21,29 @@ public partial class OverlayWindow : Window
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TRANSPARENT = 0x20;
     private const int WS_EX_LAYERED = 0x80000;
+    private const int WS_EX_NOACTIVATE = 0x08000000;   // clicks work WITHOUT stealing focus from the game
 
     [DllImport("user32.dll")] private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll")] private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
+    private const int VK_LBUTTON = 0x01;
+    private struct POINT { public int X; public int Y; }
 
     private readonly DispatcherTimer _toastTimer;
     private readonly DispatcherTimer _highlightTimer;
     private readonly DispatcherTimer _runHudTimer;
+    private readonly DispatcherTimer _hitTestTimer;   // makes ONLY the HUD box catch clicks (see UpdateClickThrough)
+
+    private IntPtr _hwnd;
+    private long _baseExStyle;        // TRANSPARENT|LAYERED|NOACTIVATE, minus TRANSPARENT which we toggle
+    private bool _clickThrough = true;
+    private bool _draggingHud;
+    private POINT _dragAnchorCursor;  // physical cursor pos at drag start
+    private Thickness _dragStartMargin;
+
+    /// <summary>Raised when the HUD's Pause/Resume button is clicked; App maps it to the pipeline.</summary>
+    public event Action? PauseResumeRequested;
 
     // Mini run readout state: mirrors the run tracker's current/last run. The PIPELINE owns how long a completed
     // run stays up (kept while you're in the quest, then a grace period after you leave), so the HUD just follows
@@ -48,14 +64,23 @@ public partial class OverlayWindow : Window
         _runHudTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.0) };
         _runHudTimer.Tick += (_, _) => RefreshRunHud();
         _runHudTimer.Start();
+        // Fast poll: flip the overlay click-through ON/OFF by whether the cursor is over the HUD box, so ONLY the
+        // HUD is interactive while everything else always passes through to the game.
+        _hitTestTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
+        _hitTestTimer.Tick += (_, _) => UpdateClickThrough();
+        _hitTestTimer.Start();
     }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        IntPtr hwnd = new WindowInteropHelper(this).Handle;
-        long ex = GetWindowLongPtr(hwnd, GWL_EXSTYLE).ToInt64();
-        SetWindowLongPtr(hwnd, GWL_EXSTYLE, (IntPtr)(ex | WS_EX_TRANSPARENT | WS_EX_LAYERED));
+        _hwnd = new WindowInteropHelper(this).Handle;
+        long ex = GetWindowLongPtr(_hwnd, GWL_EXSTYLE).ToInt64();
+        // NOACTIVATE so clicking the HUD button/dragging never steals focus from the game. TRANSPARENT is the bit
+        // we toggle per-cursor-position (UpdateClickThrough); the rest is the constant base.
+        _baseExStyle = ex | WS_EX_LAYERED | WS_EX_NOACTIVATE;
+        _clickThrough = true;
+        SetWindowLongPtr(_hwnd, GWL_EXSTYLE, (IntPtr)(_baseExStyle | WS_EX_TRANSPARENT));
 
         // React to setting changes without any explicit wiring (pg-loot pattern): debug region borders + the
         // run-HUD show/hide toggle both apply live.
@@ -80,6 +105,7 @@ public partial class OverlayWindow : Window
             Height = Math.Max(1, rect.Height / dpi.DpiScaleY);
             Visibility = Visibility.Visible;
             ApplyDebug();   // the borders are ratio-based; refit when the window moves/resizes
+            PositionRunHud();   // keep the HUD at its saved ratio position after a move/resize
         });
     }
 
@@ -261,16 +287,136 @@ public partial class OverlayWindow : Window
         RunHudBorder.Visibility = Visibility.Collapsed;
     }
 
+    // --- Click-through toggle: make ONLY the HUD box interactive (everything else passes to the game) ---
+    private void UpdateClickThrough()
+    {
+        if (_draggingHud) { DragTick(); SetClickThrough(false); return; }   // cursor-driven drag owns this tick
+        bool want = false;
+        if (RunHudBorder.Visibility == Visibility.Visible && RunHudBorder.ActualWidth > 0 && GetCursorPos(out POINT p))
+        {
+            Point tl = RunHudBorder.PointToScreen(new Point(0, 0));
+            Point br = RunHudBorder.PointToScreen(new Point(RunHudBorder.ActualWidth, RunHudBorder.ActualHeight));
+            want = p.X >= tl.X && p.X < br.X && p.Y >= tl.Y && p.Y < br.Y;
+        }
+        SetClickThrough(!want);
+    }
+
+    private void SetClickThrough(bool on)
+    {
+        if (on == _clickThrough || _hwnd == IntPtr.Zero) return;
+        _clickThrough = on;
+        SetWindowLongPtr(_hwnd, GWL_EXSTYLE, (IntPtr)(on ? _baseExStyle | WS_EX_TRANSPARENT : _baseExStyle));
+    }
+
+    // --- Drag the HUD within the game window; persist as a 0..1 ratio ---
+    // Drag START only comes from WPF (the box is interactive under the cursor here); MOVE + RELEASE are then
+    // driven by the cursor poll (GetCursorPos + async button state), which is reliable on this layered/no-activate
+    // overlay where captured MouseMove/Up can be flaky.
+    private void RunHud_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (IsWithin(e.OriginalSource as DependencyObject, HudPauseButton)) return;   // let the button click through
+        if (!GetCursorPos(out _dragAnchorCursor)) return;
+        EnsureAbsolutePositioning();
+        _dragStartMargin = RunHudBorder.Margin;
+        _draggingHud = true;
+        e.Handled = true;
+    }
+
+    // Called from the hit-test timer while dragging: follow the cursor; end + persist on left-button release.
+    private void DragTick()
+    {
+        if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) { _draggingHud = false; return; }   // button up → done
+        if (!GetCursorPos(out POINT c)) return;
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        double dx = (c.X - _dragAnchorCursor.X) / dpi.DpiScaleX;
+        double dy = (c.Y - _dragAnchorCursor.Y) / dpi.DpiScaleY;
+        double left = Math.Max(0, Math.Min(_dragStartMargin.Left + dx, ActualWidth - RunHudBorder.ActualWidth));
+        double top = Math.Max(0, Math.Min(_dragStartMargin.Top + dy, ActualHeight - RunHudBorder.ActualHeight));
+        RunHudBorder.Margin = new Thickness(left, top, 0, 0);
+        // Persist EVERY move (not just on release): the 1s PositionRunHud timer can fire mid/at-end of a drag and
+        // would otherwise re-apply a stale ratio and snap the box back. Keeping the ratio current means any
+        // PositionRunHud just re-asserts where you are. (Brief disk writes during a drag are negligible.)
+        RunHudBorder.HorizontalAlignment = HorizontalAlignment.Left;
+        RunHudBorder.VerticalAlignment = VerticalAlignment.Top;
+        AppSettings.Instance.RunHudPosX = Math.Clamp(left / Math.Max(1, ActualWidth - RunHudBorder.ActualWidth), 0, 1);
+        AppSettings.Instance.RunHudPosY = Math.Clamp(top / Math.Max(1, ActualHeight - RunHudBorder.ActualHeight), 0, 1);
+    }
+
+    // Switch the HUD from its default Right/Bottom anchor to absolute Left/Top (keeping its current spot) so drag
+    // and ratio-positioning share one coordinate model.
+    private void EnsureAbsolutePositioning()
+    {
+        if (RunHudBorder.HorizontalAlignment == HorizontalAlignment.Left && RunHudBorder.VerticalAlignment == VerticalAlignment.Top) return;
+        Point pos = RunHudBorder.TranslatePoint(new Point(0, 0), (UIElement)RunHudBorder.Parent);
+        RunHudBorder.HorizontalAlignment = HorizontalAlignment.Left;
+        RunHudBorder.VerticalAlignment = VerticalAlignment.Top;
+        RunHudBorder.Margin = new Thickness(pos.X, pos.Y, 0, 0);
+    }
+
+    // Apply the persisted ratio position once the user has dragged it (no-op while unset or mid-drag).
+    private void PositionRunHud()
+    {
+        if (_draggingHud) return;
+        AppSettings s = AppSettings.Instance;
+        if (s.RunHudPosX < 0 || s.RunHudPosY < 0 || RunHudBorder.ActualWidth <= 0 || ActualWidth <= 0) return;
+        RunHudBorder.HorizontalAlignment = HorizontalAlignment.Left;
+        RunHudBorder.VerticalAlignment = VerticalAlignment.Top;
+        RunHudBorder.Margin = new Thickness(
+            s.RunHudPosX * Math.Max(0, ActualWidth - RunHudBorder.ActualWidth),
+            s.RunHudPosY * Math.Max(0, ActualHeight - RunHudBorder.ActualHeight), 0, 0);
+    }
+
+    private void HudPause_Click(object sender, RoutedEventArgs e) => PauseResumeRequested?.Invoke();
+
+    // Pause/Play glyphs drawn as vector shapes (dark, to contrast the light default button) — no icon-font risk.
+    private static readonly Brush HudIconBrush = FrozenBrush(0xE6, 0xC6, 0x6A);   // gold — visible on the dark HUD
+    // Both icons live in a FIXED 12x12 host so swapping pause<->play never changes the button (and box) width — a
+    // width change is what made the whole HUD jump on click.
+    private static UIElement PauseIcon()
+    {
+        var host = new Grid { Width = 12, Height = 12 };
+        var sp = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        sp.Children.Add(new Rectangle { Width = 3.5, Height = 12, Fill = HudIconBrush, Margin = new Thickness(0, 0, 3, 0) });
+        sp.Children.Add(new Rectangle { Width = 3.5, Height = 12, Fill = HudIconBrush });
+        host.Children.Add(sp);
+        return host;
+    }
+    private static UIElement PlayIcon()
+    {
+        var host = new Grid { Width = 12, Height = 12 };
+        host.Children.Add(new System.Windows.Shapes.Path
+        {
+            Fill = HudIconBrush,
+            Data = Geometry.Parse("M1,0 L12,6 L1,12 Z"),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        return host;
+    }
+
+    private static bool IsWithin(DependencyObject? node, DependencyObject ancestor)
+    {
+        for (; node is not null; node = VisualTreeHelper.GetParent(node))
+            if (ReferenceEquals(node, ancestor)) return true;
+        return false;
+    }
+
     // Live/finished run: dot + name + difficulty + running timer (+ XP at completion).
     private void ShowRunHud(RunRecord r)
     {
         bool done = r.Completed, paused = r.Paused;
         bool warn = r.XpMissing; // completed but XP never read — the time-sensitive miss (chat scrolls away)
         RunHudDot.Fill = warn ? HudWarn : done ? HudGreen : paused ? HudAmber : HudLive;
-        RunHudBorder.BorderBrush = warn ? HudWarn : done ? HudGreen : paused ? HudAmber : HudGold;
+        // Paused reads at a glance — WITHOUT any size change (constant thickness + fixed-size icon → no jump on
+        // click): a strong ORANGE border + orange timer + amber-tinted fill, plus the amber dot and ▶ button.
+        RunHudBorder.BorderBrush = warn ? HudWarn : done ? HudGreen : paused ? HudPausedAccent : HudGold;
+        RunHudBorder.Background = paused ? HudBgPaused : HudBgDefault;
         RunHudName.Text = string.IsNullOrWhiteSpace(r.DungeonName) ? "(unnamed quest)" : r.DungeonName;
-        RunHudDiff.Text = string.IsNullOrWhiteSpace(r.Difficulty) ? (paused ? "· paused" : "") : "· " + r.Difficulty + (paused ? " · paused" : "");
+        // No "· paused" text — the amber dot + the ▶ button already signal paused, and a changing suffix would
+        // grow the box and push the button off-screen.
+        RunHudDiff.Text = string.IsNullOrWhiteSpace(r.Difficulty) ? "" : "· " + r.Difficulty;
         RunHudTimer.Text = FmtElapsed(r.Elapsed(DateTime.UtcNow));
+        RunHudTimer.Foreground = paused ? HudPausedAccent : HudTimer;
         if (warn)
         {
             RunHudXp.Text = "⚠ XP not read — check chat";
@@ -284,7 +430,12 @@ public partial class OverlayWindow : Window
             RunHudXp.Visibility = Visibility.Visible;
         }
         else RunHudXp.Visibility = Visibility.Collapsed;
+        // Pause/Resume only for a LIVE run (running or paused) — not a finished/lingering card.
+        HudPauseButton.Visibility = done ? Visibility.Collapsed : Visibility.Visible;
+        HudPauseButton.Content = paused ? PlayIcon() : PauseIcon();   // drawn shapes — no icon-font dependency
+        HudPauseButton.ToolTip = paused ? "Resume run" : "Pause run";
         RunHudBorder.Visibility = Visibility.Visible;
+        PositionRunHud();
     }
 
     // Quest-entry popup detected (not yet entered): preview the quest that's about to start — name + difficulty +
@@ -301,7 +452,9 @@ public partial class OverlayWindow : Window
         RunHudDiff.Text = tail.Length > 0 ? "· " + tail : "";
         RunHudTimer.Text = "ready";
         RunHudXp.Visibility = Visibility.Collapsed;
+        HudPauseButton.Visibility = Visibility.Collapsed;   // nothing to pause until the run starts
         RunHudBorder.Visibility = Visibility.Visible;
+        PositionRunHud();
     }
 
     private static string FmtElapsed(TimeSpan t)
@@ -318,4 +471,14 @@ public partial class OverlayWindow : Window
         brush.Freeze();
         return brush;
     }
+    private static Brush FrozenArgb(byte a, byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromArgb(a, r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+    private static readonly Brush HudBgDefault = FrozenArgb(0xE0, 0x10, 0x14, 0x18);   // matches the XAML default
+    private static readonly Brush HudBgPaused = FrozenArgb(0xE6, 0x3A, 0x28, 0x0C);    // clearly amber-tinted dark
+    private static readonly Brush HudPausedAccent = FrozenBrush(0xF2, 0x8A, 0x2A);     // strong orange — paused border+timer
+    private static readonly Brush HudTimer = FrozenBrush(0xE6, 0xC6, 0x6A);            // gold — running timer
 }

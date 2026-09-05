@@ -136,10 +136,20 @@ spot) needs a manual **Start**; wilderness/normal quests all show their title. *
 matches the quest name); the across-all-lines Slayer check still **discards** one if it slips through.
 Character name+level are OCR'd while idle, cached, and stamped onto the run at start.
 
-**In-game mini HUD** (`OverlayWindow`, bottom-right): **previews the quest the moment the entry popup is
+**In-game mini HUD** (`OverlayWindow`, default bottom-right): **previews the quest the moment the entry popup is
 detected** (name / difficulty / level, "ready" — follows `EntryHeld`), then hands off to the live timer once
 the run starts and shows the result + XP at completion (follows `CurrentChanged`). A live run outranks the
 preview; toggled by the "show run HUD" setting.
+
+The HUD is **interactive** despite the overlay being click-through: a fast cursor poll (`UpdateClickThrough`)
+flips `WS_EX_TRANSPARENT` off ONLY while the cursor is over the HUD box (and `WS_EX_NOACTIVATE` keeps clicks
+from stealing game focus), so just that one box catches input while everything else passes to the game. It has
+a **⏸/▶ Pause/Resume button** (drawn as vector shapes, not an icon font; live runs only) wired to the pipeline,
+and is **drag-to-reposition anywhere in the game window** — drag START comes from WPF mouse-down, but MOVE +
+RELEASE are driven by the same cursor poll (`GetCursorPos` + `GetAsyncKeyState`) because captured WPF
+mouse-move/up are unreliable on a layered/no-activate overlay. Position persists as a 0..1 ratio of the game
+window (`AppSettings.RunHudPosX/Y`, saved on every move so the 1s re-position can't snap it back). **Paused**
+reads at a glance without changing size (no jump): orange border + orange timer + amber fill + amber dot.
 
 **Game closed/minimized → auto-pause** (frame-starvation watchdog): the capture frame stream is the
 game-alive heartbeat. A timer (every 10s) auto-**pauses** a live, un-paused run when no frame has arrived

@@ -85,6 +85,13 @@ public sealed class AppSettings : INotifyPropertyChanged
     private bool _windowMaximized;
     public bool WindowMaximized { get => _windowMaximized; set => Set(ref _windowMaximized, value); }
 
+    // Position of the in-game run HUD as a 0..1 ratio of the game window (resolution-independent). -1 = unset,
+    // in which case the HUD keeps its default bottom-right anchor until the user drags it.
+    private double _runHudPosX = -1;
+    public double RunHudPosX { get => _runHudPosX; set => Set(ref _runHudPosX, value); }
+    private double _runHudPosY = -1;
+    public double RunHudPosY { get => _runHudPosY; set => Set(ref _runHudPosY, value); }
+
     // Which shell page was active at last exit ("Home" | "Gear" | "Run"); restored on next launch.
     private string _activePage = "Home";
     public string ActivePage { get => _activePage; set => Set(ref _activePage, value); }
@@ -283,6 +290,8 @@ public sealed class AppSettings : INotifyPropertyChanged
                     s.WindowWidth = loaded.WindowWidth;
                     s.WindowHeight = loaded.WindowHeight;
                     s.WindowMaximized = loaded.WindowMaximized;
+                    s.RunHudPosX = loaded.RunHudPosX;
+                    s.RunHudPosY = loaded.RunHudPosY;
                     s.ActivePage = loaded.ActivePage ?? "Home";
                     s.AutoOpenWiki = loaded.AutoOpenWiki;
                     s.ShowSlotMarkers = loaded.ShowSlotMarkers;
