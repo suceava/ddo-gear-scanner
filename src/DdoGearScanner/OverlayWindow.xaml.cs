@@ -40,7 +40,8 @@ public partial class OverlayWindow : Window
     private bool _clickThrough = true;
     private bool _draggingHud;
     private POINT _dragAnchorCursor;  // physical cursor pos at drag start
-    private Thickness _dragStartMargin;
+    private double _dragStartLeft, _dragStartTop;   // Canvas.Left/Top at drag start
+    private const double HudEdgeGap = 16;           // keep the box this far off the window edges
 
     /// <summary>Raised when the HUD's Pause/Resume button is clicked; App maps it to the pipeline.</summary>
     public event Action? PauseResumeRequested;
@@ -316,8 +317,8 @@ public partial class OverlayWindow : Window
     {
         if (IsWithin(e.OriginalSource as DependencyObject, HudPauseButton)) return;   // let the button click through
         if (!GetCursorPos(out _dragAnchorCursor)) return;
-        EnsureAbsolutePositioning();
-        _dragStartMargin = RunHudBorder.Margin;
+        _dragStartLeft = double.IsNaN(Canvas.GetLeft(RunHudBorder)) ? 0 : Canvas.GetLeft(RunHudBorder);
+        _dragStartTop = double.IsNaN(Canvas.GetTop(RunHudBorder)) ? 0 : Canvas.GetTop(RunHudBorder);
         _draggingHud = true;
         e.Handled = true;
     }
@@ -330,41 +331,54 @@ public partial class OverlayWindow : Window
         DpiScale dpi = VisualTreeHelper.GetDpi(this);
         double dx = (c.X - _dragAnchorCursor.X) / dpi.DpiScaleX;
         double dy = (c.Y - _dragAnchorCursor.Y) / dpi.DpiScaleY;
-        double left = Math.Max(0, Math.Min(_dragStartMargin.Left + dx, ActualWidth - RunHudBorder.ActualWidth));
-        double top = Math.Max(0, Math.Min(_dragStartMargin.Top + dy, ActualHeight - RunHudBorder.ActualHeight));
-        RunHudBorder.Margin = new Thickness(left, top, 0, 0);
-        // Persist EVERY move (not just on release): the 1s PositionRunHud timer can fire mid/at-end of a drag and
-        // would otherwise re-apply a stale ratio and snap the box back. Keeping the ratio current means any
-        // PositionRunHud just re-asserts where you are. (Brief disk writes during a drag are negligible.)
-        RunHudBorder.HorizontalAlignment = HorizontalAlignment.Left;
-        RunHudBorder.VerticalAlignment = VerticalAlignment.Top;
-        AppSettings.Instance.RunHudPosX = Math.Clamp(left / Math.Max(1, ActualWidth - RunHudBorder.ActualWidth), 0, 1);
-        AppSettings.Instance.RunHudPosY = Math.Clamp(top / Math.Max(1, ActualHeight - RunHudBorder.ActualHeight), 0, 1);
+        double bw = RunHudBorder.ActualWidth, bh = RunHudBorder.ActualHeight;
+        double left = Clamp(_dragStartLeft + dx, ActualWidth, bw);
+        double top = Clamp(_dragStartTop + dy, ActualHeight, bh);
+        Canvas.SetLeft(RunHudBorder, left);
+        Canvas.SetTop(RunHudBorder, top);
+        // Persist the box's CENTER as a 0..1 ratio (saved every move so the 1s re-position can't snap it back).
+        // Center-anchoring lets the box grow/shrink around its spot without shoving content off an edge.
+        AppSettings.Instance.RunHudPosX = Math.Clamp((left + bw / 2) / Math.Max(1, ActualWidth), 0, 1);
+        AppSettings.Instance.RunHudPosY = Math.Clamp((top + bh / 2) / Math.Max(1, ActualHeight), 0, 1);
     }
 
-    // Switch the HUD from its default Right/Bottom anchor to absolute Left/Top (keeping its current spot) so drag
-    // and ratio-positioning share one coordinate model.
-    private void EnsureAbsolutePositioning()
+    // Clamp a coordinate so the box stays fully in-window with an edge gap (falls back to the gap when the box is
+    // somehow larger than the space).
+    private static double Clamp(double v, double windowLen, double boxLen)
     {
-        if (RunHudBorder.HorizontalAlignment == HorizontalAlignment.Left && RunHudBorder.VerticalAlignment == VerticalAlignment.Top) return;
-        Point pos = RunHudBorder.TranslatePoint(new Point(0, 0), (UIElement)RunHudBorder.Parent);
-        RunHudBorder.HorizontalAlignment = HorizontalAlignment.Left;
-        RunHudBorder.VerticalAlignment = VerticalAlignment.Top;
-        RunHudBorder.Margin = new Thickness(pos.X, pos.Y, 0, 0);
+        double max = windowLen - boxLen - HudEdgeGap;
+        return max <= HudEdgeGap ? HudEdgeGap : Math.Max(HudEdgeGap, Math.Min(v, max));
     }
 
-    // Apply the persisted ratio position once the user has dragged it (no-op while unset or mid-drag).
+    // Position the HUD on the canvas: from the persisted CENTER ratio once dragged, else default bottom-right.
+    // Uses the box's DESIRED width (Canvas measures unconstrained) and clamps with an edge gap, so the box grows
+    // and shrinks around its spot and never clips. Re-run on size change (SizeChanged) so it stays fluid.
     private void PositionRunHud()
     {
         if (_draggingHud) return;
+        double bw = RunHudBorder.ActualWidth, bh = RunHudBorder.ActualHeight;
+        if (bw <= 0 || ActualWidth <= 0) return;
         AppSettings s = AppSettings.Instance;
-        if (s.RunHudPosX < 0 || s.RunHudPosY < 0 || RunHudBorder.ActualWidth <= 0 || ActualWidth <= 0) return;
-        RunHudBorder.HorizontalAlignment = HorizontalAlignment.Left;
-        RunHudBorder.VerticalAlignment = VerticalAlignment.Top;
-        RunHudBorder.Margin = new Thickness(
-            s.RunHudPosX * Math.Max(0, ActualWidth - RunHudBorder.ActualWidth),
-            s.RunHudPosY * Math.Max(0, ActualHeight - RunHudBorder.ActualHeight), 0, 0);
+        double left, top;
+        if (s.RunHudPosX < 0 || s.RunHudPosY < 0)   // never dragged → default bottom-right
+        {
+            left = ActualWidth - bw - HudEdgeGap;
+            top = ActualHeight - bh - HudEdgeGap;
+        }
+        else
+        {
+            left = s.RunHudPosX * ActualWidth - bw / 2;
+            top = s.RunHudPosY * ActualHeight - bh / 2;
+        }
+        left = Clamp(left, ActualWidth, bw);
+        top = Clamp(top, ActualHeight, bh);
+        if (Canvas.GetLeft(RunHudBorder) != left) Canvas.SetLeft(RunHudBorder, left);
+        if (Canvas.GetTop(RunHudBorder) != top) Canvas.SetTop(RunHudBorder, top);
     }
+
+    // Content changed the box size (XP appears on completion, longer name, etc.) — re-apply the center-ratio
+    // position so it grows/shrinks around its spot and stays fully in-window instead of clipping at an edge.
+    private void RunHud_SizeChanged(object sender, SizeChangedEventArgs e) => PositionRunHud();
 
     private void HudPause_Click(object sender, RoutedEventArgs e) => PauseResumeRequested?.Invoke();
 

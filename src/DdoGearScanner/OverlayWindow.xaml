@@ -67,12 +67,12 @@
                        Foreground="White"
                        Text="" />
         </Border>
-        <!-- Mini run readout, pinned to the game's bottom-right: one row, shown only WHILE a run is in progress
-             (and briefly after completion so the XP isn't missed). Click-through like the rest of the overlay. -->
+        <!-- Mini run readout: one row, shown only WHILE a run is in progress (and briefly after completion so the
+             XP isn't missed). Lives on a CANVAS so it's measured UNCONSTRAINED (gets its full desired width — a
+             Grid + alignment + margin would cap its width and clip content); positioned via Canvas.Left/Top in
+             code (default bottom-right; drag-reposition persists a center ratio). -->
+        <Canvas>
         <Border x:Name="RunHudBorder"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Bottom"
-                Margin="0,0,20,20"
                 Background="#E0101418"
                 BorderBrush="#FFE0A030"
                 BorderThickness="1.5"
@@ -80,6 +80,7 @@
                 Padding="12,7"
                 Cursor="SizeAll"
                 MouseLeftButtonDown="RunHud_MouseDown"
+                SizeChanged="RunHud_SizeChanged"
                 Visibility="Collapsed">
             <StackPanel Orientation="Horizontal">
                 <Ellipse x:Name="RunHudDot" Width="9" Height="9" Margin="0,0,8,0" VerticalAlignment="Center" Fill="#FF35C26B" />
@@ -97,5 +98,6 @@
                         VerticalAlignment="Center" Cursor="Hand" Click="HudPause_Click" Visibility="Collapsed" />
             </StackPanel>
         </Border>
+        </Canvas>
     </Grid>
 </Window>

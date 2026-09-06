@@ -147,9 +147,12 @@ from stealing game focus), so just that one box catches input while everything e
 a **⏸/▶ Pause/Resume button** (drawn as vector shapes, not an icon font; live runs only) wired to the pipeline,
 and is **drag-to-reposition anywhere in the game window** — drag START comes from WPF mouse-down, but MOVE +
 RELEASE are driven by the same cursor poll (`GetCursorPos` + `GetAsyncKeyState`) because captured WPF
-mouse-move/up are unreliable on a layered/no-activate overlay. Position persists as a 0..1 ratio of the game
-window (`AppSettings.RunHudPosX/Y`, saved on every move so the 1s re-position can't snap it back). **Paused**
-reads at a glance without changing size (no jump): orange border + orange timer + amber fill + amber dot.
+mouse-move/up are unreliable on a layered/no-activate overlay. The box sits on a **Canvas** (measured
+unconstrained → gets its full desired width; a Grid+alignment+margin caps the width and clips content like the
+XP), positioned via `Canvas.Left/Top` from a persisted **center** ratio (`AppSettings.RunHudPosX/Y`, saved every
+move) and re-applied on every `SizeChanged` with an edge-gap clamp — so it grows/shrinks around its spot and
+never clips or runs off-screen. **Paused** reads at a glance without changing size (no jump): orange border +
+orange timer + amber fill + amber dot.
 
 **Game closed/minimized → auto-pause** (frame-starvation watchdog): the capture frame stream is the
 game-alive heartbeat. A timer (every 10s) auto-**pauses** a live, un-paused run when no frame has arrived

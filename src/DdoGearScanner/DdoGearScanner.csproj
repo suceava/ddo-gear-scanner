@@ -15,7 +15,7 @@
     <!-- Build version. Baseline for dev builds; publish.ps1 -Release vX.Y.Z overrides it (-p:Version=X.Y.Z) so
          the assembly version equals the GitHub release tag, which the in-app update check compares against.
          Keep this at/above the latest published release so dev builds don't nag "update available". -->
-    <Version>0.13.0</Version>
+    <Version>0.13.1</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>appicon.ico</ApplicationIcon>
     <!-- Ship only the English satellite resources — every other language pack is dead weight for this
